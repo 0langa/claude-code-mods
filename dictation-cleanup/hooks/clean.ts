@@ -8,8 +8,8 @@ const FILLER = /(,?)([ \t]*)(?<![\p{L}\p{N}'-])(u+h+|u+h+m+|u+m+|a+h+|e+r|e+r+m+
 // Words people repeat on purpose ("no, no", "very very"), kept as said.
 const KEEP_REPEATED = new Set(['no', 'yes', 'very', 'so', 'bye', 'ha', 'haha', 'la', 'really', 'that', 'had', 'is', 'knock', 'tick', 'chop', 'well'])
 
-// "I want I want" and "the the": a phrase of up to three words said twice or more.
-const REPEATED_PHRASE = /(?<![\p{L}\p{N}'-])(\p{L}[\p{L}']*(?:[ \t]+\p{L}[\p{L}']*){1,2})(?:,?[ \t]+\1)+(?![\p{L}\p{N}'-])/giu
+// "I want I want" and "if the changes land, if the changes land": a phrase of up to eight words said twice or more.
+const REPEATED_PHRASE = /(?<![\p{L}\p{N}'-])(\p{L}[\p{L}']*(?:[ \t]+\p{L}[\p{L}']*){1,7})(?:,?[ \t]+\1)+(?![\p{L}\p{N}'-])/giu
 const REPEATED_WORD = /(?<![\p{L}\p{N}'-])(\p{L}[\p{L}']*)(?:,?[ \t]+\1)+(?![\p{L}\p{N}'-])/giu
 
 // Fenced and inline code, and any token holding a slash, backslash or @
@@ -77,6 +77,7 @@ export const filterFillers = (text: string) => {
 
   const tidied = withoutRepeats
     .replace(/,[ \t]*,/g, ',')
+    .replace(/(\S)[ \t]{2,}(?=\S)/g, '$1 ')
     .replace(new RegExp(`${CAPITALIZE}[ \\t]*(\\p{Ll})`, 'gu'), (_match: string, letter: string) => letter.toUpperCase())
     .replaceAll(CAPITALIZE, '')
 

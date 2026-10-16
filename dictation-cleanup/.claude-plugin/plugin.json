@@ -1,6 +1,6 @@
 {
   "name": "dictation-cleanup",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "types": "./types/index.d.ts",
   "description": "Cleans dictated prompts before they are sent: filler words, spoken quotation marks, project names spelled as the project's docs spell them, and a Haiku pass for longer messages.",
   "author": { "name": "0langa", "url": "https://github.com/0langa" },

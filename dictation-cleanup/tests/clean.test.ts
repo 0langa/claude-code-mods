@@ -70,6 +70,13 @@ describe('filter', () => {
     expect(filterFillers('Hmm, okay')).toBe('Okay')
   })
 
+  test('removes a longer phrase said again and again, and the double space it leaves', () => {
+    expect(filterFillers('just want to see if the changes land, if the changes land, if the changes land')).toBe('just want to see if the changes land')
+    expect(filterFillers("I'm saying I'm saying I'm saying it works")).toBe("I'm saying it works")
+    expect(filterFillers('see if the changes  land')).toBe('see if the changes land')
+    expect(filterFillers('it is fine, it is fine, it is a plan')).toBe('it is fine, it is a plan')
+  })
+
   test('removes German filler sounds too', () => {
     expect(filterFillers('Oh, ähm, surprise.')).toBe('Oh surprise.')
     expect(filterFillers('So äh I think öhm so')).toBe('So I think so')
