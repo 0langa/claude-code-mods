@@ -1,0 +1,10 @@
+{
+  "name": "dictation-cleanup",
+  "version": "0.1.0",
+  "description": "Removes filler words and repetitions from dictated prompts before they are sent; longer prompts get a Haiku cleanup pass.",
+  "author": { "name": "0langa", "url": "https://github.com/0langa" },
+  "homepage": "https://github.com/0langa/claude-code-mods/tree/main/dictation-cleanup",
+  "repository": "https://github.com/0langa/claude-code-mods",
+  "license": "MIT",
+  "keywords": ["dictation", "voice", "prompt", "filler-words", "tokens"]
+}

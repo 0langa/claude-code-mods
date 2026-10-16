@@ -1,0 +1,12 @@
+{
+  "name": "claude-code-mods",
+  "description": "Mods for Claude Code: plugins that change how Claude Code itself behaves.",
+  "owner": { "name": "0langa", "url": "https://github.com/0langa" },
+  "plugins": [
+    {
+      "name": "dictation-cleanup",
+      "source": "./dictation-cleanup",
+      "description": "Removes filler words and repetitions from dictated prompts before they are sent; longer prompts get a Haiku cleanup pass."
+    }
+  ]
+}
