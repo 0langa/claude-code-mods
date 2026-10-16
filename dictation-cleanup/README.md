@@ -9,7 +9,11 @@ If you dictate your prompts, the transcript is full of "uh", "um", false starts 
 3. **Project spelling, from your project's own docs.** Names and identifiers said aloud or split by the dictation tool are written the way the project writes them: "ADR seventy four" becomes `ADR-0074`, "Qwen three TTS" becomes `Qwen3-TTS`, "shorts dot json" becomes `shorts.json`. Instant and free. See below.
 4. **Haiku pass, on messages of 40 words or more.** A short, low-effort Haiku call streamlines the wording (fillers like "basically" or "you know", restated ideas, grammar slips) while keeping every request, detail, name, number and path. It is also told the project's terms, so a mis-heard name is written correctly. If Haiku fails, is slow, or returns something that doesn't look like a cleanup, the filtered text is sent instead.
 
-It only touches what you typed or dictated. Messages from other sessions, plugins, scheduled tasks and slash commands pass through unchanged, and so does anything over 8,000 characters or 20 lines, which is most likely a paste.
+It only touches what you typed or dictated. Messages from other sessions, plugins, scheduled tasks and slash commands pass through unchanged, and so does a block of your own lines over 8,000 characters or 20 lines, which is most likely a paste (a log, a file).
+
+Text you quote back is left exactly as it is, and only your own lines around it are cleaned. A line starting with `>`, and an HTML comment line like `<!-- reply -->`, count as quoted. So a reply that quotes Claude's answer and comments on it is still cleaned, and Claude never sees the quoted lines altered. Each stretch of your own lines is judged on its own, and the Haiku pass only ever gets your words.
+
+German filler sounds (ähm, äh, öhm) are removed along with the English ones.
 
 ## Project spelling: nothing to maintain
 

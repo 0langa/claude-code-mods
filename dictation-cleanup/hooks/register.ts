@@ -67,6 +67,32 @@ const isFromPerson = (origin: PromptOrigin) =>
 
 const looksLikePaste = (text: string) => text.length > MAX_CHARS || text.split('\n').length > MAX_LINES
 
+// Lines that are not the person's own words: a quoted reply (> ...) and the
+// <!-- ... --> markers some clients add. They are kept exactly as they are.
+const isQuoted = (line: string) => /^\s*>/.test(line) || /^\s*<!--.*-->\s*$/.test(line)
+
+type Part = { text: string; isQuoted: boolean }
+
+// The message in runs of quoted lines and of the person's own lines. A blank
+// line stays with the run it follows, so joining the runs with a newline gives
+// the message back exactly.
+const splitQuoted = (text: string): Part[] => {
+  const parts: Part[] = []
+
+  for (const line of text.split('\n')) {
+    const quoted = isQuoted(line)
+    const last = parts[parts.length - 1]
+
+    if (last !== undefined && (last.isQuoted === quoted || line.trim() === '')) {
+      last.text += `\n${line}`
+    } else {
+      parts.push({ text: line, isQuoted: quoted })
+    }
+  }
+
+  return parts
+}
+
 // The model's answer is used only when it looks like a cleanup of the input:
 // not empty, not much longer, not a drastic cut.
 const acceptCleanup = (input: string, output: string) => {
@@ -153,6 +179,30 @@ const cleanWithModel = async ($: EngineInterface, text: string, terms: readonly 
   }
 }
 
+type Cleaned = { text: string; fixed: string[]; isLong: boolean }
+
+// One run of the person's own lines: fillers and stutters, spoken quotes,
+// project spelling, then the Haiku pass when it is long enough.
+const cleanPart = async ($: EngineInterface, text: string, mode: Mode, terms: readonly string[], trusted: readonly string[]): Promise<Cleaned> => {
+  const glossed = applyGlossary(applyQuotes(filterFillers(text)), terms, trusted)
+  const fixed = [...glossed.fixed]
+  const isLong = countWords(glossed.text) >= MODEL_MIN_WORDS && !glossed.text.includes('```')
+  let cleaned = glossed.text
+
+  if (mode === 'on' && isLong) {
+    const modelText = await cleanWithModel($, glossed.text, terms)
+
+    if (modelText !== undefined) {
+      const again = applyGlossary(applyQuotes(modelText), terms, trusted)
+
+      cleaned = again.text
+      fixed.push(...again.fixed.filter(term => !fixed.includes(term)))
+    }
+  }
+
+  return { text: cleaned, fixed, isLong }
+}
+
 export const register: Register = on => {
   let lastOriginal: string | undefined
   let lastCleaned: string | undefined
@@ -229,7 +279,7 @@ export const register: Register = on => {
   })
 
   on('prompt.submit', async ($, e, next) => {
-    if (e.command !== undefined || e.isMeta === true || !isFromPerson(e.origin) || e.text.trim() === '' || looksLikePaste(e.text)) {
+    if (e.command !== undefined || e.isMeta === true || !isFromPerson(e.origin) || e.text.trim() === '') {
       return next(e)
     }
 
@@ -240,23 +290,16 @@ export const register: Register = on => {
     }
 
     const { terms, trusted } = await loadTerms($, termCache)
-    const glossed = applyGlossary(applyQuotes(filterFillers(e.text)), terms, trusted)
-    const filtered = glossed.text
-    const fixed = [...glossed.fixed]
+    // Quoted lines, blank runs and a run of your own lines that looks like a
+    // paste (a log, a file) are left as they are; the rest is cleaned run by run.
+    const parts = splitQuoted(e.text)
+    const results = await Promise.all(
+      parts.map(part => (part.isQuoted || part.text.trim() === '' || looksLikePaste(part.text) ? undefined : cleanPart($, part.text, mode, terms, trusted))),
+    )
+    const cleaned = parts.map((part, at) => results[at]?.text ?? part.text).join('\n')
+    const fixed = [...new Set(results.flatMap(result => result?.fixed ?? []))]
+    const isLong = results.some(result => result?.isLong === true)
     const wordsBefore = countWords(e.text)
-    const isLong = countWords(filtered) >= MODEL_MIN_WORDS && !filtered.includes('```')
-    let cleaned = filtered
-
-    if (mode === 'on' && isLong) {
-      const modelText = await cleanWithModel($, filtered, terms)
-
-      if (modelText !== undefined) {
-        const again = applyGlossary(applyQuotes(modelText), terms, trusted)
-
-        cleaned = again.text
-        fixed.push(...again.fixed.filter(term => !fixed.includes(term)))
-      }
-    }
 
     if (cleaned === e.text) {
       return next(e)

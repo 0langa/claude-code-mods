@@ -57,6 +57,12 @@ describe('filter', () => {
     expect(filterFillers('Hmm, okay')).toBe('Okay')
   })
 
+  test('removes German filler sounds too', () => {
+    expect(filterFillers('Oh, ähm, surprise.')).toBe('Oh surprise.')
+    expect(filterFillers('So äh I think öhm so')).toBe('So I think so')
+    expect(filterFillers('Ahm, the ohm and the Öl')).toBe('Ahm, the ohm and the Öl')
+  })
+
   test('removes stuttered words and phrases', () => {
     expect(filterFillers('use the the microphone')).toBe('use the microphone')
     expect(filterFillers('I, I think I want I want a fix')).toBe('I think I want a fix')
@@ -210,5 +216,46 @@ describe('spoken quotes and project terms', () => {
     await $.command.run(run('off'))
 
     expect(await submit($, 'Um, quote unquote compress ADR seventy four')).toBe('Um, quote unquote compress ADR seventy four')
+  })
+})
+
+describe('messages that quote earlier text', () => {
+  const quoted = Array.from({ length: 22 }, (_, i) => `> quoted line ${i} with um and the the in it`).join('\n')
+  const submit = async ($: Engine, text: string) => entered(await $.prompt.submit({ text, origin: DESKTOP, wait: false }))
+
+  test('your own lines are cleaned and the quoted lines stay exactly as they were', async ($, on) => {
+    engine(on)
+    const text = `${quoted}\n\nUm, I think we should, uh, ship it.\n\n> one more quote, uh\nAnd the the end.`
+
+    expect(await submit($, text)).toBe(`${quoted}\n\nI think we should ship it.\n\n> one more quote, uh\nAnd the end.`)
+  })
+
+  test('the <!-- --> markers some clients add are not your words either', async ($, on) => {
+    engine(on)
+
+    expect(await submit($, '<!-- reply um -->\nUm, fix the the bug')).toBe('<!-- reply um -->\nFix the bug')
+  })
+
+  test('a message that is nothing but a quote is left alone', async ($, on) => {
+    engine(on)
+
+    expect(await submit($, quoted)).toBe(quoted)
+  })
+
+  test('a long run of your own lines still counts as a paste', async ($, on) => {
+    const sentToModel = engine(on)
+    const log = Array.from({ length: 25 }, (_, i) => `line ${i} uh the the`).join('\n')
+
+    expect(await submit($, `> a quote\n${log}`)).toBe(`> a quote\n${log}`)
+    expect(sentToModel).toEqual([])
+  })
+
+  test('the model is given only your own words, never the quoted text', async ($, on) => {
+    const sentToModel = engine(on)
+    const result = await submit($, `${quoted}\n\n${LONG_DICTATION}`)
+
+    expect(sentToModel.length).toBe(1)
+    expect(sentToModel[0]).not.toContain('quoted line')
+    expect(result).toBe(`${quoted}\n\n${MODEL_REPLY}`)
   })
 })

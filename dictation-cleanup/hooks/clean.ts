@@ -3,7 +3,7 @@
 
 // Spoken filler sounds only. Words like "like" or "basically" can carry
 // meaning, so those are left to the model pass.
-const FILLER = /(,?)([ \t]*)(?<![\p{L}\p{N}'-])(u+h+|u+h+m+|u+m+|a+h+|e+r|e+r+m+|h+m+)(?![\p{L}\p{N}'-])(,|…|\.\.\.)?([ \t]*)/giu
+const FILLER = /(,?)([ \t]*)(?<![\p{L}\p{N}'-])(u+h+|u+h+m+|u+m+|a+h+|e+r|e+r+m+|h+m+|ä+h+m*|ö+h+m*)(?![\p{L}\p{N}'-])(,|…|\.\.\.)?([ \t]*)/giu
 
 // Words people repeat on purpose ("no, no", "very very"), kept as said.
 const KEEP_REPEATED = new Set(['no', 'yes', 'very', 'so', 'bye', 'ha', 'haha', 'la', 'really', 'that', 'had', 'is', 'knock', 'tick', 'chop', 'well'])
