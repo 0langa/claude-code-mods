@@ -9,7 +9,7 @@ If you dictate your prompts, the transcript is full of "uh", "um", false starts 
 3. **Project spelling, from your project's own docs.** Names and identifiers said aloud or split by the dictation tool are written the way the project writes them: "ADR seventy four" becomes `ADR-0074`, "Qwen three TTS" becomes `Qwen3-TTS`, "shorts dot json" becomes `shorts.json`. Instant and free. See below.
 4. **Haiku pass, on messages of 40 words or more.** A short, low-effort Haiku call streamlines the wording (fillers like "basically" or "you know", restated ideas, grammar slips) while keeping every request, detail, name, number and path. It is also told the project's terms, so a mis-heard name is written correctly. If Haiku fails, is slow, or returns something that doesn't look like a cleanup, the filtered text is sent instead.
 
-It only touches what you typed or dictated. Messages from other sessions, plugins, scheduled tasks and slash commands pass through unchanged, and so does a block of your own lines over 8,000 characters or 20 lines, which is most likely a paste (a log, a file).
+It only touches what you typed or dictated. Anything Claude or a program wrote passes through exactly as it is: messages from other sessions, the brief a session was started with, notifications, scheduled tasks, channels, the app's own notes, a compaction summary, other plugins and slash commands. That is decided by where the prompt came from and, because the desktop app stamps its own turns the same whether you or a program wrote them, also by what it looks like: a known note or brief opening, or structure that dictation does not have (headings, a list of four or more items, tagged blocks). `/clean origins` shows, as counts only, where messages came from and which were cleaned or left alone. A message of yours left alone by mistake is the safe failure: it is sent as you wrote it. A block of your own lines over 8,000 characters or 20 lines is also left alone, since it is most likely a paste (a log, a file).
 
 Text you quote back is left exactly as it is, and only your own lines around it are cleaned. A line starting with `>`, and an HTML comment line like `<!-- reply -->`, count as quoted. So a reply that quotes Claude's answer and comments on it is still cleaned, and Claude never sees the quoted lines altered. Each stretch of your own lines is judged on its own, and the Haiku pass only ever gets your words.
 
@@ -39,7 +39,15 @@ Your data stays yours. Spellings you add and your settings are kept in Claude Co
 
 The mod adds nothing to your session while it works. The one thing it reports on its own is a failed AI pass (a short notice; the message still goes out, cleaned by the word filter alone).
 
-The desktop app shows your message as you typed it. To see what Claude actually got, run `/clean last` for one message, or `/clean compare on` for a line under every cleaned message. That line is display-only: it is never sent to the model and costs no tokens. It is off by default.
+The desktop app shows your message as you typed it. To see what Claude actually got, run `/clean last` for one message, or switch on `/clean compare` for every cleaned message:
+
+| Mode | What you see |
+| --- | --- |
+| `/clean compare off` | Your messages, as you typed them (default) |
+| `/clean compare on` | A message you typed is drawn as Claude got it, in place of what you typed |
+| `/clean compare both` | What you typed, with what Claude got drawn beneath it (or the other way round on a row that already shows what Claude got) |
+
+This is only a change in how the message is drawn. The stored message, and what the model reads, never change, nothing is added to the conversation, and it costs no tokens. Because it is drawn and not written, switching the mode redraws every message at once, earlier ones of the session included, and `off` puts them all back. Nothing is left behind in the transcript. The mod keeps the last 100 cleaned messages in memory for this (nothing on disk), so a message from before the session started, or older than that, is drawn as you typed it.
 
 ## Commands
 
@@ -49,8 +57,9 @@ The desktop app shows your message as you typed it. To see what Claude actually 
 | `/clean on` | Word filter, quotes and spelling, plus the Haiku pass for longer messages (default) |
 | `/clean filter` | Everything except the Haiku pass, no model calls |
 | `/clean off` | Send prompts exactly as typed |
-| `/clean compare on` / `/clean compare off` | Show or hide the "Sent to Claude" line under every cleaned message (default off) |
+| `/clean compare on` / `both` / `off` | Draw cleaned messages as Claude got them, with the other side beneath, or as you typed them (default off); earlier ones too |
 | `/clean last` | Show your last cleaned message, as dictated and as sent |
+| `/clean origins` | Counts of where messages came from and what became of them (cleaned, nothing to clean, left alone). No text is kept. `/clean origins reset` clears them |
 | `/clean terms` | List the spellings in use here: yours, built in, and read from the folder's docs |
 | `/clean term <spelling>` | Add a spelling by hand, kept for every project |
 | `/clean term remove <spelling>` | Drop a spelling you added |

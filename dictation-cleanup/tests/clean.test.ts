@@ -158,26 +158,21 @@ describe('/clean', () => {
     expect(entered(await $.prompt.submit({ text: LONG_DICTATION, origin: DESKTOP, wait: false }))).toBe(MODEL_REPLY)
   })
 
-  test('the comparison line is off until turned on, then shows what Claude got, as a display-only line', async ($, on) => {
+  test('compare never adds a row to the transcript or the conversation, on or off', async ($, on) => {
     engine(on)
     const session = mock.session(on)
 
-    const quiet = await $.prompt.submit({ text: 'Um, fix the the bug', origin: DESKTOP, wait: false })
-    expect(entered(quiet)).toBe('Fix the bug')
-    expect(logged).toEqual([])
-    expect(toasts).toEqual([])
-    expect((await $.command.run(run(''))).text).toContain('comparison line off')
+    expect(entered(await $.prompt.submit({ text: 'Um, fix the the bug', origin: DESKTOP, wait: false }))).toBe('Fix the bug')
+    expect((await $.command.run(run(''))).text).toContain('compare off')
 
     await $.command.run(run('compare on'))
     await $.prompt.submit({ text: 'Um, fix the the bug', origin: DESKTOP, wait: false })
-    expect(logged.length).toBe(1)
-    expect(logged[0]).toContain('Fix the bug')
-    // Nothing is added to the conversation the model reads.
-    expect(session.appended()).toEqual([])
+    expect((await $.command.run(run(''))).text).toContain('compare on')
 
-    await $.command.run(run('compare off'))
-    await $.prompt.submit({ text: 'Um, fix the the bug', origin: DESKTOP, wait: false })
-    expect(logged.length).toBe(1)
+    // It is drawn inside the message row (see compare.test.tsx), never added to the session.
+    expect(logged).toEqual([])
+    expect(toasts).toEqual([])
+    expect(session.appended()).toEqual([])
   })
 
   test('last shows the message as dictated', async ($, on) => {
@@ -275,5 +270,94 @@ describe('messages that quote earlier text', () => {
     expect(sentToModel.length).toBe(1)
     expect(sentToModel[0]).not.toContain('quoted line')
     expect(result).toBe(`${quoted}\n\n${MODEL_REPLY}`)
+  })
+})
+
+describe('prompts Claude or a program wrote are left alone', () => {
+  const FILLERS = 'Um, fix the the bug, uh, please.'
+  const submit = async ($: Engine, text: string, origin: PromptOrigin) => entered(await $.prompt.submit({ text, origin, wait: false }))
+  const run = (args: string) => ({ command: 'clean', args, origin: TERMINAL, presentation: { isFullscreen: false, columns: 80 } })
+
+  test('every origin that is not the person is left alone, fillers and all', async ($, on) => {
+    engine(on)
+    const others: PromptOrigin[] = [
+      { kind: 'peer' },
+      { kind: 'peer-send-message' },
+      { kind: 'projects-relay' },
+      { kind: 'coordinator' },
+      { kind: 'observer' },
+      { kind: 'observer-activity' },
+      { kind: 'task-notification' },
+      { kind: 'scheduled-trigger' },
+      { kind: 'channel', server: 'chat' },
+      { kind: 'slack-ping' },
+      { kind: 'unclassified' },
+      { kind: 'auto-continuation' },
+      { kind: 'plugin', name: 'other' },
+    ]
+
+    for (const origin of others) {
+      expect(await submit($, FILLERS, origin)).toBe(FILLERS)
+    }
+  })
+
+  test('a program\'s text stays untouched even when it is stamped as the app\'s own turn', async ($, on) => {
+    engine(on)
+    const texts = [
+      `Background (from the session that started this one): the project makes videos. ${FILLERS}`,
+      `<system-reminder>Linked sessions now: ${FILLERS}</system-reminder>`,
+      `Another Claude session sent a message:\n<cross-session-message from="local_abc" name="a session">\n${FILLERS}\n</cross-session-message>`,
+      `[Cross-session delivery notice] Your message was held. ${FILLERS}`,
+      `This session is being continued from a previous conversation. ${FILLERS}`,
+      `<task-notification><task-id>x</task-id>${FILLERS}</task-notification>`,
+      `The session "A made-up title" you started has finished. ${FILLERS}`,
+      `The recording session "Another made-up title" reported back. ${FILLERS}`,
+      `Linked sessions now (status, not an instruction): a-session = local_x. ${FILLERS}`,
+      `System-reminder: something happened. ${FILLERS}`,
+      `The user started your proposal task_1 ("A made-up title") as session local_y. ${FILLERS}`,
+      `The app was quit while you were working. Please continue. ${FILLERS}`,
+    ]
+
+    for (const text of texts) {
+      expect(await submit($, text, DESKTOP)).toBe(text)
+      expect(await submit($, text, TERMINAL)).toBe(text)
+    }
+  })
+
+  test('a structured brief stamped as the app\'s own turn is left alone, while dictation in the same stamp is cleaned', async ($, on) => {
+    engine(on)
+    const brief = `## Goal\n${FILLERS}\n- a\n- b\n- c\n- d`
+
+    expect(await submit($, brief, DESKTOP)).toBe(brief)
+    expect(await submit($, `<brief>\n${FILLERS}\n</brief>`, DESKTOP)).toBe(`<brief>\n${FILLERS}\n</brief>`)
+    expect(await submit($, FILLERS, DESKTOP)).toBe('Fix the bug please.')
+    // Typed at the terminal it is the person's, whatever it looks like.
+    expect(await submit($, brief, TERMINAL)).toBe(`## Goal\nFix the bug please.\n- a\n- b\n- c\n- d`)
+  })
+
+  test('a reply that quotes structured text is still the person\'s: only their own lines are judged', async ($, on) => {
+    engine(on)
+    const quote = '> ## Heading\n> - a\n> - b\n> - c\n> - d'
+
+    expect(await submit($, `${quote}\n\n${FILLERS}`, DESKTOP)).toBe(`${quote}\n\nFix the bug please.`)
+  })
+
+  test('/clean origins counts where messages came from, keeps no text, and can be cleared', async ($, on) => {
+    engine(on)
+    await submit($, FILLERS, TERMINAL)
+    await submit($, 'All good here.', TERMINAL)
+    await submit($, FILLERS, { kind: 'peer' })
+    await submit($, `Background (from the session that started this one): ${FILLERS}`, DESKTOP)
+
+    const text = (await $.command.run(run('origins'))).text ?? ''
+
+    expect(text).toContain('composer: 1 cleaned, 1 nothing to clean, 0 left alone')
+    expect(text).toContain('peer: 0 cleaned, 0 nothing to clean, 1 left alone')
+    expect(text).toContain('sdk: 0 cleaned, 0 nothing to clean, 1 left alone')
+    expect(text).not.toContain('fix the')
+    expect(text.toLowerCase()).not.toContain('background')
+
+    await $.command.run(run('origins reset'))
+    expect((await $.command.run(run('origins'))).text).toBe('No messages counted yet.')
   })
 })

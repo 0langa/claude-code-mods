@@ -1,7 +1,10 @@
 import type { EngineInterface, PromptOrigin, Register } from 'claude-code'
 
 import { countWords, filterFillers } from './clean'
+import { compareMode, comparisonFor, lastPair, rememberPair, setCompare, storedCompare } from './compare'
+import type { CompareMode } from './compare'
 import { applyGlossary, harvestTerms } from './glossary'
+import { isFromPerson, isMachineText, looksMachineWritten } from './source'
 import { applyQuotes } from './spoken'
 
 type Mode = 'on' | 'filter' | 'off'
@@ -54,18 +57,28 @@ const readMode = async ($: EngineInterface): Promise<Mode> => {
   return MODES.find(mode => mode === stored) ?? 'on'
 }
 
-// The comparison line under each cleaned message; off until turned on. When
-// everything works the mod adds nothing to the session: /clean last shows a
-// message on request.
-const readCompare = async ($: EngineInterface) => (await $.store.get('compare')) === true
+type Outcome = 'cleaned' | 'unchanged' | 'left alone'
+type Seen = Record<string, Partial<Record<Outcome, number>>>
 
-// Only words a person typed or dictated: the terminal, the desktop app (an SDK
-// host), Remote Control, or a plugin passing on the person's own words.
-const isFromPerson = (origin: PromptOrigin) =>
-  origin.kind === 'composer' ||
-  origin.kind === 'sdk' ||
-  origin.kind === 'bridge' ||
-  (origin.kind === 'plugin' && origin.asUser === true)
+const readSeen = async ($: EngineInterface): Promise<Seen> => {
+  const stored = await $.store.get('origins')
+
+  return typeof stored === 'object' && stored !== null && !Array.isArray(stored) ? (stored as Seen) : {}
+}
+
+// Content-free counters (where a message came from, what became of it), so
+// /clean origins can show that other sessions' messages are left alone. No text
+// is kept. A counter must never get in the way of a prompt.
+const note = async ($: EngineInterface, origin: PromptOrigin, outcome: Outcome) => {
+  try {
+    const seen = await readSeen($)
+    const entry = seen[origin.kind] ?? {}
+
+    await $.store.set('origins', { ...seen, [origin.kind]: { ...entry, [outcome]: (entry[outcome] ?? 0) + 1 } })
+  } catch {
+    // ignored on purpose
+  }
+}
 
 const looksLikePaste = (text: string) => text.length > MAX_CHARS || text.split('\n').length > MAX_LINES
 
@@ -208,17 +221,41 @@ const cleanPart = async ($: EngineInterface, text: string, mode: Mode, terms: re
 }
 
 export const register: Register = on => {
-  let lastOriginal: string | undefined
-  let lastCleaned: string | undefined
   const termCache: TermCache = new Map()
+
+  // Drawn inside the message row itself, never added to the conversation: with
+  // compare on, a message you typed is drawn as Claude got it; with both, the
+  // other side is drawn beneath it. A toggle redraws every message, earlier ones
+  // included, so nothing is left behind in the transcript.
+  on('ui.render', { component: 'UserMessage' }, async ($, e, next) => {
+    const comparison = await comparisonFor($, e.props.text)
+
+    if (comparison === undefined) {
+      return next(e)
+    }
+    if (comparison.kind === 'replace') {
+      return next({ ...e, props: { ...e.props, text: comparison.text } })
+    }
+    const { Box, Text } = $.ui.resolve(e)
+
+    return (
+      <Box flexDirection="column">
+        {await next(e)}
+        <Text dimColor>{comparison.label}</Text>
+        <Text dimColor>{comparison.other}</Text>
+      </Box>
+    )
+  })
 
   on('session.start', async ($, e, next) => {
     await $.command.register({
       name: 'clean',
-      description: 'Dictation cleanup: on, filter (no AI pass), off, compare on|off, last (both versions), terms (spelling list)',
-      argumentHint: '[on|filter|off|compare on|compare off|last|terms|term <spelling>|term remove <spelling>]',
+      description: 'Dictation cleanup: on, filter (no AI pass), off, compare on|both|off (draw each cleaned message as Claude got it), last (both versions), terms (spelling list), origins (what was cleaned or left alone)',
+      argumentHint: '[on|filter|off|compare on|compare both|compare off|last|terms|term <spelling>|term remove <spelling>|origins]',
       immediate: true,
     })
+    // The switch is kept across sessions; the drawing reads it from the session's state.
+    await setCompare($, storedCompare(await $.store.get('compare')))
 
     return next(e)
   })
@@ -242,6 +279,24 @@ export const register: Register = on => {
 
       return { text: `Added "${spelling}". It will be written exactly like that from now on.` }
     }
+    if (arg === 'origins reset') {
+      await $.store.delete('origins')
+
+      return { text: 'Counts cleared.' }
+    }
+    if (arg === 'origins') {
+      const rows = Object.entries(await readSeen($)).map(
+        ([kind, count]) => `${kind}: ${count.cleaned ?? 0} cleaned, ${count.unchanged ?? 0} nothing to clean, ${count['left alone'] ?? 0} left alone`,
+      )
+
+      return {
+        text:
+          rows.length === 0
+            ? 'No messages counted yet.'
+            : `Where messages came from, and what became of them (counts only, no text kept):\n${rows.join('\n')}\n\n` +
+              'Only your own words are cleaned. Other sessions, notifications, schedules and programs are left alone. /clean origins reset starts the count over.',
+      }
+    }
     if (arg === 'terms') {
       const { terms: all, own } = await loadTerms($, termCache)
       const rest = all.filter(term => !own.includes(term) && !SEED_TERMS.includes(term))
@@ -259,31 +314,45 @@ export const register: Register = on => {
 
       return { text: `Dictation cleanup: ${chosen}.` }
     }
-    if (arg === 'compare on' || arg === 'compare off') {
-      const isOn = arg === 'compare on'
-      await $.store.set('compare', isOn)
+    if (arg === 'compare on' || arg === 'compare off' || arg === 'compare both') {
+      const mode = arg.slice('compare '.length) as CompareMode
 
-      return { text: isOn ? 'Comparison line: on. Each cleaned message is shown as Claude got it.' : 'Comparison line: off. Use /clean last to check a message.' }
-    }
-    if (arg === 'last') {
+      await $.store.set('compare', mode)
+      await setCompare($, mode)
+
       return {
         text:
-          lastOriginal === undefined
-            ? 'No message cleaned yet in this session.'
-            : `You dictated:\n\n${lastOriginal}\n\nClaude got:\n\n${lastCleaned ?? ''}`,
+          mode === 'on'
+            ? 'Compare: on. Your messages are drawn as Claude got them, earlier ones of this session too. Only the drawing changes; /clean compare off draws what you typed again.'
+            : mode === 'both'
+              ? 'Compare: both. Under each cleaned message you see the other side, earlier ones of this session too.'
+              : 'Compare: off. Messages are drawn as you typed them, earlier ones included. /clean last shows a message on request.',
+      }
+    }
+    if (arg === 'last') {
+      const pair = await lastPair($)
+
+      return {
+        text: pair === undefined ? 'No message cleaned yet in this session.' : `You dictated:\n\n${pair.typed}\n\nClaude got:\n\n${pair.sent}`,
       }
     }
 
     const mode = await readMode($)
-    const compare = (await readCompare($)) ? 'on' : 'off'
+    const compare = await compareMode($)
 
     return {
-      text: `Dictation cleanup is ${mode}, comparison line ${compare}. Use /clean on, /clean filter (no AI pass), /clean off, /clean compare on|off, or /clean last.`,
+      text: `Dictation cleanup is ${mode}, compare ${compare}. Use /clean on, /clean filter (no AI pass), /clean off, /clean compare on|both|off, or /clean last.`,
     }
   })
 
   on('prompt.submit', async ($, e, next) => {
-    if (e.command !== undefined || e.isMeta === true || !isFromPerson(e.origin) || e.text.trim() === '') {
+    if (e.command !== undefined || e.text.trim() === '') {
+      return next(e)
+    }
+    // Not the person's own words: another session, a notification, a program.
+    if (e.isMeta === true || !isFromPerson(e.origin) || isMachineText(e.text)) {
+      await note($, e.origin, 'left alone')
+
       return next(e)
     }
 
@@ -297,6 +366,14 @@ export const register: Register = on => {
     // Quoted lines, blank runs and a run of your own lines that looks like a
     // paste (a log, a file) are left as they are; the rest is cleaned run by run.
     const parts = splitQuoted(e.text)
+
+    // The desktop app's SDK turns are stamped the same whether a person or a
+    // program wrote them: a structured brief is a program's.
+    if (e.origin.kind === 'sdk' && looksMachineWritten(parts.filter(part => !part.isQuoted).map(part => part.text).join('\n'))) {
+      await note($, e.origin, 'left alone')
+
+      return next(e)
+    }
     const results = await Promise.all(
       parts.map(part => (part.isQuoted || part.text.trim() === '' || looksLikePaste(part.text) ? undefined : cleanPart($, part.text, mode, terms, trusted))),
     )
@@ -309,20 +386,16 @@ export const register: Register = on => {
       $.ui.toast(`Dictation cleanup: the AI pass was skipped (${problem}); only the word filter ran.`)
     }
     if (cleaned === e.text) {
+      await note($, e.origin, 'unchanged')
+
       return next(e)
     }
 
-    lastOriginal = e.text
-    lastCleaned = cleaned
+    // Kept in the session's state so a message row can show the other side while
+    // compare is on (and /clean last can show it). Nothing is added to the session.
+    await rememberPair($, e.text, cleaned)
+    await note($, e.origin, 'cleaned')
 
-    const entered = await next({ ...e, text: cleaned })
-
-    // Opt in with /clean compare on: the desktop app shows the prompt as typed,
-    // so this line says what Claude got (a transcript line the model never reads).
-    if (await readCompare($)) {
-      $.ui.log(`Sent to Claude (${countWords(e.text)} → ${countWords(cleaned)} words):\n${cleaned}`)
-    }
-
-    return entered
+    return next({ ...e, text: cleaned })
   })
 }
