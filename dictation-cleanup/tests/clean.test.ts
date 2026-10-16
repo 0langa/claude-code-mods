@@ -351,3 +351,43 @@ describe('prompts Claude or a program wrote are left alone', () => {
     expect((await $.command.run(run('origins'))).text).toBe('No messages counted yet.')
   })
 })
+
+describe('the AI pass corrects typed messages too', () => {
+  const submit = async ($: Engine, text: string) => entered(await $.prompt.submit({ text, origin: TERMINAL, wait: false }))
+  const TYPO = 'Pleas fix the the bug in teh parser now'
+
+  test('a typo in a typed message is fixed, silently', async ($, on) => {
+    const sentToModel = engine(on, 'Please fix the bug in the parser now')
+
+    expect(await submit($, TYPO)).toBe('Please fix the bug in the parser now')
+    expect(sentToModel.length).toBe(1)
+    expect(toasts).toEqual([])
+  })
+
+  test('a message that is already fine is not changed', async ($, on) => {
+    engine(on, 'Please fix the bug in the parser now')
+
+    expect(await submit($, 'Please fix the bug in the parser now')).toBe('Please fix the bug in the parser now')
+  })
+
+  test('a short message is not worth the wait: no model call', async ($, on) => {
+    const sentToModel = engine(on)
+
+    expect(await submit($, 'yes, do it')).toBe('yes, do it')
+    expect(await submit($, 'Pleas fix teh bug')).toBe('Pleas fix teh bug')
+    expect(sentToModel).toEqual([])
+  })
+
+  test('a reply that rewrites the message instead of correcting it is not used', async ($, on) => {
+    engine(on, 'Certainly, here is a completely different sentence about something else')
+
+    expect(await submit($, TYPO)).toBe('Pleas fix the bug in teh parser now')
+    expect(toasts.length).toBe(1)
+  })
+
+  test('a reply that answers the message is not used', async ($, on) => {
+    engine(on, 'The parser is fine, I checked it for you and nothing is wrong there now')
+
+    expect(await submit($, 'Can you check whether the parser is broken for me now')).toBe('Can you check whether the parser is broken for me now')
+  })
+})

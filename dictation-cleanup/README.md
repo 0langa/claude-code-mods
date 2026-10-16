@@ -1,13 +1,13 @@
 # dictation-cleanup
 
-If you dictate your prompts, the transcript is full of "uh", "um", false starts and repeated phrases, and project names come out wrong ("Quen three TTS", "ADR seventy four"). The model then reads all of that, and a large model may spend extra thinking just working out what you meant. This mod cleans the prompt when you press Enter, before Claude sees it.
+If you dictate your prompts, the transcript is full of "uh", "um", false starts and repeated phrases, and project names come out wrong ("Quen three TTS", "ADR seventy four"). The model then reads all of that, and a large model may spend extra thinking just working out what you meant. Typed messages have typos. This mod is an AI-assisted autocorrect for your prompts: it corrects the message when you press Enter, before Claude sees it, and your message is drawn as Claude got it.
 
 ## What it does
 
 1. **Word filter, on every message.** Removes filler sounds (uh, um, ah, er, erm, hmm) and stuttered words or phrases ("the the", "I want I want"). Instant and free. Code blocks, inline code, URLs and file paths are never touched, and intentional repeats like "no, no" or "very very" are kept.
 2. **Spoken quotation marks.** "quote unquote compress" becomes `"compress"`, and "quote this phrase unquote" (also "open quote ... close quote") becomes `"this phrase"`. Instant and free.
 3. **Project spelling, from your project's own docs.** Names and identifiers said aloud or split by the dictation tool are written the way the project writes them: "ADR seventy four" becomes `ADR-0074`, "Qwen three TTS" becomes `Qwen3-TTS`, "shorts dot json" becomes `shorts.json`. Instant and free. See below.
-4. **Haiku pass, on messages of 40 words or more.** A short, low-effort Haiku call streamlines the wording (fillers like "basically" or "you know", restated ideas, grammar slips) while keeping every request, detail, name, number and path. It is also told the project's terms, so a mis-heard name is written correctly. If Haiku fails, is slow, or returns something that doesn't look like a cleanup, the filtered text is sent instead.
+4. **Haiku pass, on messages of 8 words or more, typed or dictated.** A short, low-effort Haiku call corrects typos, grammar and punctuation, and streamlines dictated wording (fillers like "basically" or "you know", restated ideas), while keeping every request, detail, name, number and path. It changes as little as it can and returns a message that is already fine exactly as it is. It is also told the project's terms, so a mis-heard name is written correctly. The call holds up sending, so it is given 4 seconds. If Haiku fails, is slow, returns something that doesn't look like a correction, or rewrites or answers the message instead of correcting it (checked: most of the reply must be your own words, in your order), the word-filtered text is sent instead and a short notice says so. A message shorter than 8 words only gets the free filter, and `/clean filter` turns the AI pass off.
 
 It only touches what you typed or dictated. Anything Claude or a program wrote passes through exactly as it is: messages from other sessions, the brief a session was started with, notifications, scheduled tasks, channels, the app's own notes, a compaction summary, other plugins and slash commands. That is decided by where the prompt came from and, because the desktop app stamps its own turns the same whether you or a program wrote them, also by what it looks like: a known note or brief opening, or structure that dictation does not have (headings, a list of four or more items, tagged blocks). `/clean origins` shows, as counts only, where messages came from and which were cleaned or left alone. A message of yours left alone by mistake is the safe failure: it is sent as you wrote it. A block of your own lines over 8,000 characters or 20 lines is also left alone, since it is most likely a paste (a log, a file).
 
@@ -39,7 +39,7 @@ Your data stays yours. Spellings you add and your settings are kept in Claude Co
 
 The mod adds nothing to your session while it works. The one thing it reports on its own is a failed AI pass (a short notice; the message still goes out, cleaned by the word filter alone).
 
-The desktop app shows your message as you typed it. To see what Claude actually got, run `/clean last`: it shows your last cleaned message as dictated and as sent.
+Your message is drawn as Claude got it: the app first shows what you typed, then, once the message has been cleaned (a moment later, while the AI pass runs), draws it as Claude received it. Only the drawing changes. The cleaned text is what enters the conversation and what the model reads, nothing is added to the conversation, and the model never sees what you typed. Nothing reaches Claude before the correction is done. `/clean last` shows your last cleaned message as you wrote it and as sent. The mod keeps the last 100 cleaned messages in memory for the drawing (nothing on disk), so a message from before the session started is drawn as you wrote it.
 
 ## Commands
 
@@ -49,7 +49,7 @@ The desktop app shows your message as you typed it. To see what Claude actually 
 | `/clean on` | Word filter, quotes and spelling, plus the Haiku pass for longer messages (default) |
 | `/clean filter` | Everything except the Haiku pass, no model calls |
 | `/clean off` | Send prompts exactly as typed |
-| `/clean last` | Show your last cleaned message, as dictated and as sent |
+| `/clean last` | Show your last cleaned message, as you wrote it and as sent |
 | `/clean origins` | Counts of where messages came from and what became of them (cleaned, nothing to clean, left alone). No text is kept. `/clean origins reset` clears them |
 | `/clean terms` | List the spellings in use here: yours, built in, and read from the folder's docs |
 | `/clean term <spelling>` | Add a spelling by hand, kept for every project |
@@ -70,7 +70,7 @@ const CLEANUP_EFFORT = 'low'
 
 ## Cost
 
-Each Haiku call costs a little: the message in, the cleaned message out, plus the cleanup instructions and, for a project with docs, about a hundred short terms. That is far cheaper than the same tokens on Opus or Fable, and the cleaned message stays shorter in the conversation for every turn after it. The filter, the quotes and the spelling are free.
+Each Haiku call is stateless and goes out through your session's own Claude connection: the message in, the corrected message out, plus the instructions and, for a project with docs, about a hundred short terms, roughly 1,000 tokens in and 200 out. At Haiku 5.5's list price ($0.10 per million input tokens, $0.50 per million output) that is about $0.0002 a message, or 2 cents per 100 messages. How it counts for you depends on how you sign in (a plan's usage, or API billing). The filter, the quotes and the spelling are free, and `/clean filter` stops the Haiku calls.
 
 ## Install
 
