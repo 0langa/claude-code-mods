@@ -39,15 +39,7 @@ Your data stays yours. Spellings you add and your settings are kept in Claude Co
 
 The mod adds nothing to your session while it works. The one thing it reports on its own is a failed AI pass (a short notice; the message still goes out, cleaned by the word filter alone).
 
-The desktop app shows your message as you typed it. To see what Claude actually got, run `/clean last` for one message, or switch on `/clean compare` for every cleaned message:
-
-| Mode | What you see |
-| --- | --- |
-| `/clean compare off` | Your messages, as you typed them (default) |
-| `/clean compare on` | A message you typed is drawn as Claude got it, in place of what you typed |
-| `/clean compare both` | What you typed, with what Claude got drawn beneath it (or the other way round on a row that already shows what Claude got) |
-
-This is only a change in how the message is drawn. The stored message, and what the model reads, never change, nothing is added to the conversation, and it costs no tokens. Because it is drawn and not written, switching the mode redraws every message at once, earlier ones of the session included, and `off` puts them all back. Nothing is left behind in the transcript. The mod keeps the last 100 cleaned messages in memory for this (nothing on disk), so a message from before the session started, or older than that, is drawn as you typed it.
+The desktop app shows your message as you typed it. To see what Claude actually got, run `/clean last`: it shows your last cleaned message as dictated and as sent.
 
 ## Commands
 
@@ -57,7 +49,6 @@ This is only a change in how the message is drawn. The stored message, and what 
 | `/clean on` | Word filter, quotes and spelling, plus the Haiku pass for longer messages (default) |
 | `/clean filter` | Everything except the Haiku pass, no model calls |
 | `/clean off` | Send prompts exactly as typed |
-| `/clean compare on` / `both` / `off` | Draw cleaned messages as Claude got them, with the other side beneath, or as you typed them (default off); earlier ones too |
 | `/clean last` | Show your last cleaned message, as dictated and as sent |
 | `/clean origins` | Counts of where messages came from and what became of them (cleaned, nothing to clean, left alone). No text is kept. `/clean origins reset` clears them |
 | `/clean terms` | List the spellings in use here: yours, built in, and read from the folder's docs |

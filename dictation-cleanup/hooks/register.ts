@@ -1,8 +1,6 @@
 import type { EngineInterface, PromptOrigin, Register } from 'claude-code'
 
 import { countWords, filterFillers } from './clean'
-import { compareMode, comparisonFor, lastPair, rememberPair, setCompare, storedCompare } from './compare'
-import type { CompareMode } from './compare'
 import { applyGlossary, harvestTerms } from './glossary'
 import { isFromPerson, isMachineText, looksMachineWritten } from './source'
 import { applyQuotes } from './spoken'
@@ -222,40 +220,17 @@ const cleanPart = async ($: EngineInterface, text: string, mode: Mode, terms: re
 
 export const register: Register = on => {
   const termCache: TermCache = new Map()
-
-  // Drawn inside the message row itself, never added to the conversation: with
-  // compare on, a message you typed is drawn as Claude got it; with both, the
-  // other side is drawn beneath it. A toggle redraws every message, earlier ones
-  // included, so nothing is left behind in the transcript.
-  on('ui.render', { component: 'UserMessage' }, async ($, e, next) => {
-    const comparison = await comparisonFor($, e.props.text)
-
-    if (comparison === undefined) {
-      return next(e)
-    }
-    if (comparison.kind === 'replace') {
-      return next({ ...e, props: { ...e.props, text: comparison.text } })
-    }
-    const { Box, Text } = $.ui.resolve(e)
-
-    return (
-      <Box flexDirection="column">
-        {await next(e)}
-        <Text dimColor>{comparison.label}</Text>
-        <Text dimColor>{comparison.other}</Text>
-      </Box>
-    )
-  })
+  let last: { typed: string; sent: string } | undefined
 
   on('session.start', async ($, e, next) => {
     await $.command.register({
       name: 'clean',
-      description: 'Dictation cleanup: on, filter (no AI pass), off, compare on|both|off (draw each cleaned message as Claude got it), last (both versions), terms (spelling list), origins (what was cleaned or left alone)',
-      argumentHint: '[on|filter|off|compare on|compare both|compare off|last|terms|term <spelling>|term remove <spelling>|origins]',
+      description: 'Dictation cleanup: on, filter (no AI pass), off, last (both versions), terms (spelling list), origins (what was cleaned or left alone)',
+      argumentHint: '[on|filter|off|last|terms|term <spelling>|term remove <spelling>|origins]',
       immediate: true,
     })
-    // The switch is kept across sessions; the drawing reads it from the session's state.
-    await setCompare($, storedCompare(await $.store.get('compare')))
+    // An earlier version kept a compare setting; it is gone.
+    await $.store.delete('compare')
 
     return next(e)
   })
@@ -314,34 +289,16 @@ export const register: Register = on => {
 
       return { text: `Dictation cleanup: ${chosen}.` }
     }
-    if (arg === 'compare on' || arg === 'compare off' || arg === 'compare both') {
-      const mode = arg.slice('compare '.length) as CompareMode
-
-      await $.store.set('compare', mode)
-      await setCompare($, mode)
-
-      return {
-        text:
-          mode === 'on'
-            ? 'Compare: on. Your messages are drawn as Claude got them, earlier ones of this session too. Only the drawing changes; /clean compare off draws what you typed again.'
-            : mode === 'both'
-              ? 'Compare: both. Under each cleaned message you see the other side, earlier ones of this session too.'
-              : 'Compare: off. Messages are drawn as you typed them, earlier ones included. /clean last shows a message on request.',
-      }
-    }
     if (arg === 'last') {
-      const pair = await lastPair($)
-
       return {
-        text: pair === undefined ? 'No message cleaned yet in this session.' : `You dictated:\n\n${pair.typed}\n\nClaude got:\n\n${pair.sent}`,
+        text: last === undefined ? 'No message cleaned yet in this session.' : `You dictated:\n\n${last.typed}\n\nClaude got:\n\n${last.sent}`,
       }
     }
 
     const mode = await readMode($)
-    const compare = await compareMode($)
 
     return {
-      text: `Dictation cleanup is ${mode}, compare ${compare}. Use /clean on, /clean filter (no AI pass), /clean off, /clean compare on|both|off, or /clean last.`,
+      text: `Dictation cleanup is ${mode}, Use /clean on, /clean filter (no AI pass), /clean off, or /clean last.`,
     }
   })
 
@@ -391,9 +348,8 @@ export const register: Register = on => {
       return next(e)
     }
 
-    // Kept in the session's state so a message row can show the other side while
-    // compare is on (and /clean last can show it). Nothing is added to the session.
-    await rememberPair($, e.text, cleaned)
+    // For /clean last. Nothing is added to the session.
+    last = { typed: e.text, sent: cleaned }
     await note($, e.origin, 'cleaned')
 
     return next({ ...e, text: cleaned })

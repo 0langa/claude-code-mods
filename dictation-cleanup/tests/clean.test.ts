@@ -165,23 +165,6 @@ describe('/clean', () => {
     expect(entered(await $.prompt.submit({ text: LONG_DICTATION, origin: DESKTOP, wait: false }))).toBe(MODEL_REPLY)
   })
 
-  test('compare never adds a row to the transcript or the conversation, on or off', async ($, on) => {
-    engine(on)
-    const session = mock.session(on)
-
-    expect(entered(await $.prompt.submit({ text: 'Um, fix the the bug', origin: DESKTOP, wait: false }))).toBe('Fix the bug')
-    expect((await $.command.run(run(''))).text).toContain('compare off')
-
-    await $.command.run(run('compare on'))
-    await $.prompt.submit({ text: 'Um, fix the the bug', origin: DESKTOP, wait: false })
-    expect((await $.command.run(run(''))).text).toContain('compare on')
-
-    // It is drawn inside the message row (see compare.test.tsx), never added to the session.
-    expect(logged).toEqual([])
-    expect(toasts).toEqual([])
-    expect(session.appended()).toEqual([])
-  })
-
   test('last shows the message as dictated', async ($, on) => {
     engine(on)
     await $.prompt.submit({ text: 'Um, fix the the bug', origin: DESKTOP, wait: false })
