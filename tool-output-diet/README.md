@@ -10,7 +10,7 @@ Only three things, all of which are noise by construction:
 2. **Progress frames drawn over each other.** A progress bar is one line redrawn with a carriage return (`10%`, `40%`, `100%`). A terminal shows the last frame, so that is the one Claude gets. Typical of model downloads, `pip`, `npm`, `ffmpeg` and renderers.
 3. **Long runs of identical lines.** Four or more of the same line in a row are shown once, followed by `[the line above is repeated N more times]`.
 
-When something was cut, one line at the end says what: `[output condensed: 79 overwritten progress frames removed]`. Claude is told, so nothing is silently different.
+Nothing is added to the output. Colour codes and overwritten progress frames are dropped silently, since they were never text. A collapsed run of identical lines carries its marker inline, because the count is information.
 
 ## What it never does
 

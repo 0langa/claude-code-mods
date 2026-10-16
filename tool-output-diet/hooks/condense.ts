@@ -58,13 +58,3 @@ export const condense = (input: string): Condensed => {
 
   return { text: kept.join('\n'), ansi, frames, repeats }
 }
-
-export const describeCut = ({ ansi, frames, repeats }: Pick<Condensed, 'ansi' | 'frames' | 'repeats'>) => {
-  const parts = [
-    ansi > 0 ? 'colour codes' : undefined,
-    frames > 0 ? `${frames} overwritten progress frames` : undefined,
-    repeats > 0 ? `${repeats} repeated lines` : undefined,
-  ].filter(part => part !== undefined)
-
-  return `[output condensed: ${parts.join(', ')} removed]`
-}

@@ -55,10 +55,17 @@ describe('stripAttribution', () => {
 
 // The engine beneath the plugin: a shell that records the command it was given,
 // and the text the engine itself would compose.
+let toasts: string[] = []
+
 const engine = (on: On) => {
   const ran: string[] = []
+  toasts = []
   mock.store(on)
-  on('ui.toast', () => ({ value: undefined }))
+  on('ui.toast', (_$, e) => {
+    toasts.push(e.text)
+
+    return { value: undefined }
+  })
   on('tool.call', (_$, e) => {
     ran.push((e as { command: string }).command)
 
@@ -88,6 +95,8 @@ describe('the mod', () => {
     await commit($, 'PowerShell')
 
     expect(ran).toEqual(['git commit -m "Fix it"', 'git commit -m "Fix it"'])
+    // It works silently.
+    expect(toasts).toEqual([])
   })
 
   test('other commands run as given', async ($, on) => {

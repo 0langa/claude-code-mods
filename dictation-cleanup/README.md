@@ -29,7 +29,7 @@ It is built to leave ordinary writing alone:
 - Capitals are only ever added for a name with a digit (`Qwen3-TTS`) or a name you vouched for. Capitals you typed are never taken away.
 - A phrase counts as a name only if the docs write it capitalised in the middle of a sentence, more than once, and never in lowercase. Title Case headings and sentence starts do not count.
 
-You can see what it did: a toast ("Spelled as in your project: ADR-0074, Qwen3-TTS"), the "Sent to Claude" line under the message, and `/clean last` for the before and after. `/clean terms` lists every term it knows for the folder you are in.
+It stays silent when it works. To check a message, `/clean last` shows what you dictated and what Claude got, and `/clean terms` lists every term it knows for the folder you are in.
 
 For something the docs never mention, add it once: `/clean term Remotion`. It is kept across sessions and applies in every project.
 
@@ -37,7 +37,9 @@ Your data stays yours. Spellings you add and your settings are kept in Claude Co
 
 ## Seeing what was sent
 
-The desktop app shows your message as you typed it. With the comparison line on, the mod posts a line under each cleaned message showing what Claude actually got. That line is display-only: it is never sent to the model and costs no tokens.
+The mod adds nothing to your session while it works. The one thing it reports on its own is a failed AI pass (a short notice; the message still goes out, cleaned by the word filter alone).
+
+The desktop app shows your message as you typed it. To see what Claude actually got, run `/clean last` for one message, or `/clean compare on` for a line under every cleaned message. That line is display-only: it is never sent to the model and costs no tokens. It is off by default.
 
 ## Commands
 
@@ -47,7 +49,7 @@ The desktop app shows your message as you typed it. With the comparison line on,
 | `/clean on` | Word filter, quotes and spelling, plus the Haiku pass for longer messages (default) |
 | `/clean filter` | Everything except the Haiku pass, no model calls |
 | `/clean off` | Send prompts exactly as typed |
-| `/clean compare on` / `/clean compare off` | Show or hide the "Sent to Claude" line (default on) |
+| `/clean compare on` / `/clean compare off` | Show or hide the "Sent to Claude" line under every cleaned message (default off) |
 | `/clean last` | Show your last cleaned message, as dictated and as sent |
 | `/clean terms` | List the spellings in use here: yours, built in, and read from the folder's docs |
 | `/clean term <spelling>` | Add a spelling by hand, kept for every project |

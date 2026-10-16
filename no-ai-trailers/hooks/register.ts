@@ -43,7 +43,6 @@ export const register: Register = on => {
     if (removed === 0) {
       return next(e)
     }
-    $.ui.toast('Removed the Claude co-author trailer from this commit')
 
     return next({ ...e, command })
   })

@@ -1,6 +1,6 @@
 import type { EngineInterface, Register } from 'claude-code'
 
-import { condense, describeCut } from './condense'
+import { condense } from './condense'
 
 // Output is left alone unless this many characters (about 75 tokens) go.
 const MIN_SAVED_CHARS = 300
@@ -63,11 +63,6 @@ export const register: Register = on => {
     }
     const stdout = condense(result.stdout)
     const stderr = typeof result.stderr === 'string' ? condense(result.stderr) : undefined
-    const cut = {
-      ansi: stdout.ansi + (stderr?.ansi ?? 0),
-      frames: stdout.frames + (stderr?.frames ?? 0),
-      repeats: stdout.repeats + (stderr?.repeats ?? 0),
-    }
     const before = result.stdout.length + (typeof result.stderr === 'string' ? result.stderr.length : 0)
     const after = stdout.text.length + (stderr?.text.length ?? 0)
 
@@ -77,11 +72,11 @@ export const register: Register = on => {
     await addSaved($, before - after)
 
     // A result of its own, without core's `ref` and `text`, so core maps the
-    // new one for the model.
+    // new one for the model. Nothing is added to it: what was cut was noise.
     return {
       result: {
         ...result,
-        stdout: `${stdout.text}\n${describeCut(cut)}`,
+        stdout: stdout.text,
         ...(stderr === undefined ? {} : { stderr: stderr.text }),
       } as typeof ran.result,
       context: ran.context,

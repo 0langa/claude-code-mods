@@ -6,6 +6,7 @@ A Claude Code plugin marketplace of mods (plugins with function hooks), publishe
 - Every mod is listed in `.claude-plugin/marketplace.json` (`"source": "./<mod>"`) and in the table in `README.md`.
 - Before committing a change: `claude plugin validate <mod>` and `claude plugin test <mod>`. Bump `version` in the mod's `plugin.json` for changes others should get.
 - This folder is installed as the `claude-code-mods` marketplace, read from disk, so edits apply after `/reload-plugins` or in the next session.
+- A mod is silent when it works: no toast, log line, status note or text appended to a result on the success path. It speaks only when something fails, or when the user asked to see it (a command, an opt-in setting). Tests assert the silence.
 
 ## This repository is public: keep personal data out (see `PRIVACY.md`)
 

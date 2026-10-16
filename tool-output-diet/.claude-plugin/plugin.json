@@ -1,6 +1,6 @@
 {
   "name": "tool-output-diet",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Trims shell output before Claude reads it: colour codes, overwritten progress-bar frames and long runs of identical lines. Nothing else is touched.",
   "author": { "name": "0langa", "url": "https://github.com/0langa" },
   "homepage": "https://github.com/0langa/claude-code-mods/tree/main/tool-output-diet",

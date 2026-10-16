@@ -2,7 +2,7 @@ import { describe, expect, mock, test } from 'claude-code/testing'
 import type { On } from 'claude-code'
 import type { Engine } from 'claude-code/testing'
 
-import { condense, describeCut } from '../hooks/condense'
+import { condense } from '../hooks/condense'
 
 const ESC = '\u001b'
 
@@ -38,11 +38,6 @@ describe('condense', () => {
 
     expect(condense(text)).toEqual({ text, ansi: 0, frames: 0, repeats: 0 })
   })
-
-  test('says what was cut, and only that', () => {
-    expect(describeCut({ ansi: 3, frames: 0, repeats: 2 })).toBe('[output condensed: colour codes, 2 repeated lines removed]')
-    expect(describeCut({ ansi: 0, frames: 40, repeats: 0 })).toBe('[output condensed: 40 overwritten progress frames removed]')
-  })
 })
 
 const NOISY = `${Array.from({ length: 80 }, (_, i) => `${String(i).padStart(3)}%`).join('\r')}\nbuilt ok\n`
@@ -58,12 +53,13 @@ const call = ($: Engine, tool: 'Bash' | 'PowerShell' = 'Bash') =>
   $.tool.call({ tool, command: 'build' } as never) as Promise<{ result?: Record<string, unknown>; isError?: boolean }>
 
 describe('the shell hook', () => {
-  test('trims a noisy successful command, and says so', async ($, on) => {
+  test('trims a noisy successful command and adds nothing to it', async ($, on) => {
     shell(on, { stdout: NOISY, stderr: '', interrupted: false })
     const ran = await call($)
 
     expect(String(ran.result?.stdout)).toContain('built ok')
-    expect(String(ran.result?.stdout)).toContain('[output condensed: 79 overwritten progress frames removed]')
+    expect(String(ran.result?.stdout)).not.toContain('condensed')
+    expect(ran.result?.stdout).toBe(' 79%\nbuilt ok\n')
     expect(String(ran.result?.stdout).length).toBeLessThan(NOISY.length / 3)
     expect(ran.result?.interrupted).toBe(false)
   })
@@ -71,7 +67,7 @@ describe('the shell hook', () => {
   test('works on PowerShell output too', async ($, on) => {
     shell(on, { stdout: NOISY, stderr: '', interrupted: false })
 
-    expect(String((await call($, 'PowerShell')).result?.stdout)).toContain('condensed')
+    expect(String((await call($, 'PowerShell')).result?.stdout).length).toBeLessThan(NOISY.length / 3)
   })
 
   test('quiet output is returned exactly as it came', async ($, on) => {

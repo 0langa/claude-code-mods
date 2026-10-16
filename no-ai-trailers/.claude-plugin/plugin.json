@@ -1,6 +1,6 @@
 {
   "name": "no-ai-trailers",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Keeps the Claude co-author trailer and the Generated-with footer out of your commits and pull requests: the model is told not to write them, and any that slip into a git commit or gh pr command are removed.",
   "author": { "name": "0langa", "url": "https://github.com/0langa" },
   "homepage": "https://github.com/0langa/claude-code-mods/tree/main/no-ai-trailers",

@@ -94,8 +94,6 @@ check() {
 : > "$work/deny"
 if [ -f "$denylist" ]; then
   grep -v -e '^[[:space:]]*#' -e '^[[:space:]]*$' "$denylist" > "$work/deny"
-elif [ -z "${CI:-}" ]; then
-  echo "privacy-scan: note: no $denylist yet. Put names and IDs only you know there (see PRIVACY.md)." >&2
 fi
 
 case "$mode" in

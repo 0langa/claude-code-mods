@@ -15,13 +15,17 @@ const MODEL_REPLY =
   'I have been using the microphone in Claude Code, and there are many filler words that still use tokens when sending. ' +
   'Is there a way to create something that cleans up what I said, so fillers and repetitions are gone before it is sent?'
 
-// What the last Haiku call was told to do.
+// What the last Haiku call was told to do, and everything the mod showed in the session.
 let lastSystem = ''
+let toasts: string[] = []
+let logged: string[] = []
 
 // The engine beneath the plugin: the prompt enters as it arrives, and Haiku answers `reply`.
 // `files` are the docs of the folder the session runs in (root files only, by name).
 const engine = (on: On, reply = MODEL_REPLY, files: Record<string, string> = {}) => {
   const sentToModel: string[] = []
+  toasts = []
+  logged = []
   mock.store(on)
   on('session.cwd', () => ({ value: '/repo' }))
   on('fs.list', (_$, e) => ({
@@ -41,7 +45,16 @@ const engine = (on: On, reply = MODEL_REPLY, files: Record<string, string> = {})
     return { value: { isAnswered: true, text: reply, usage: USAGE } }
   })
   on('ui.status', () => ({ value: undefined }))
-  on('ui.toast', () => ({ value: undefined }))
+  on('ui.toast', (_$, e) => {
+    toasts.push(e.text)
+
+    return { value: undefined }
+  })
+  on('ui.log', (_$, e) => {
+    logged.push(e.text)
+
+    return { value: undefined }
+  })
 
   return sentToModel
 }
@@ -92,6 +105,9 @@ describe('prompt', () => {
     expect(entered(result)).toBe(MODEL_REPLY)
     expect(sentToModel.length).toBe(1)
     expect(sentToModel[0]).not.toContain(' um,')
+    // Nothing is added to the session when it works.
+    expect(toasts).toEqual([])
+    expect(logged).toEqual([])
   })
 
   test('an implausible model reply falls back to the filtered text', async ($, on) => {
@@ -99,6 +115,10 @@ describe('prompt', () => {
     const result = await $.prompt.submit({ text: LONG_DICTATION, origin: DESKTOP, wait: false })
 
     expect(entered(result)).toBe(filterFillers(LONG_DICTATION))
+    // The one thing worth a word: the AI pass did not happen.
+    expect(toasts.length).toBe(1)
+    expect(toasts[0]).toContain('the AI pass was skipped')
+    expect(toasts[0]).toContain('not usable')
   })
 
   test('messages that are not the person\'s own words are left alone', async ($, on) => {
@@ -138,21 +158,14 @@ describe('/clean', () => {
     expect(entered(await $.prompt.submit({ text: LONG_DICTATION, origin: DESKTOP, wait: false }))).toBe(MODEL_REPLY)
   })
 
-  test('compare off hides the comparison line; on shows it, as a display-only line', async ($, on) => {
+  test('the comparison line is off until turned on, then shows what Claude got, as a display-only line', async ($, on) => {
     engine(on)
-    const logged: string[] = []
-    on('ui.log', ($, e) => {
-      logged.push(e.text)
-
-      return { value: undefined }
-    })
     const session = mock.session(on)
 
-    await $.command.run(run('compare off'))
     const quiet = await $.prompt.submit({ text: 'Um, fix the the bug', origin: DESKTOP, wait: false })
     expect(entered(quiet)).toBe('Fix the bug')
     expect(logged).toEqual([])
-    expect(session.appended()).toEqual([])
+    expect(toasts).toEqual([])
     expect((await $.command.run(run(''))).text).toContain('comparison line off')
 
     await $.command.run(run('compare on'))
@@ -161,6 +174,10 @@ describe('/clean', () => {
     expect(logged[0]).toContain('Fix the bug')
     // Nothing is added to the conversation the model reads.
     expect(session.appended()).toEqual([])
+
+    await $.command.run(run('compare off'))
+    await $.prompt.submit({ text: 'Um, fix the the bug', origin: DESKTOP, wait: false })
+    expect(logged.length).toBe(1)
   })
 
   test('last shows the message as dictated', async ($, on) => {
@@ -189,6 +206,7 @@ describe('spoken quotes and project terms', () => {
     engine(on, MODEL_REPLY, DOCS)
 
     expect(await submit($, 'Check ADR seventy four and Qwen three TTS, and open shorts dot json')).toBe('Check ADR-0074 and Qwen3-TTS, and open shorts.json')
+    expect(toasts).toEqual([])
   })
 
   test('a long prompt tells the model the project terms, and the spelling is applied again after its pass', async ($, on) => {

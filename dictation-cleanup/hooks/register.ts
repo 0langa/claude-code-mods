@@ -54,8 +54,10 @@ const readMode = async ($: EngineInterface): Promise<Mode> => {
   return MODES.find(mode => mode === stored) ?? 'on'
 }
 
-// The comparison line under each cleaned message; on until turned off.
-const readCompare = async ($: EngineInterface) => (await $.store.get('compare')) !== false
+// The comparison line under each cleaned message; off until turned on. When
+// everything works the mod adds nothing to the session: /clean last shows a
+// message on request.
+const readCompare = async ($: EngineInterface) => (await $.store.get('compare')) === true
 
 // Only words a person typed or dictated: the terminal, the desktop app (an SDK
 // host), Remote Control, or a plugin passing on the person's own words.
@@ -161,7 +163,10 @@ const loadTerms = async ($: EngineInterface, cache: TermCache) => {
   return { terms: [...new Set([...trusted, ...(await pending)])], trusted, own }
 }
 
-const cleanWithModel = async ($: EngineInterface, text: string, terms: readonly string[]) => {
+// The cleaned text, or why there is none: the only thing the mod ever reports.
+type ModelOutcome = { text: string } | { problem: string }
+
+const cleanWithModel = async ($: EngineInterface, text: string, terms: readonly string[]): Promise<ModelOutcome> => {
   $.ui.status('Cleaning dictation…')
   try {
     const reply = await $.model.complete({
@@ -173,34 +178,33 @@ const cleanWithModel = async ($: EngineInterface, text: string, terms: readonly 
       timeoutMs: 10000,
     })
 
-    return reply.isAnswered ? acceptCleanup(text, reply.text) : undefined
+    if (!reply.isAnswered) {
+      return { problem: reply.reason === 'aborted' ? 'it timed out' : 'the model call failed' }
+    }
+    const cleaned = acceptCleanup(text, reply.text)
+
+    return cleaned === undefined ? { problem: 'its reply was not usable' } : { text: cleaned }
   } finally {
     $.ui.status(undefined)
   }
 }
 
-type Cleaned = { text: string; fixed: string[]; isLong: boolean }
+type Cleaned = { text: string; problem?: string }
 
 // One run of the person's own lines: fillers and stutters, spoken quotes,
 // project spelling, then the Haiku pass when it is long enough.
 const cleanPart = async ($: EngineInterface, text: string, mode: Mode, terms: readonly string[], trusted: readonly string[]): Promise<Cleaned> => {
   const glossed = applyGlossary(applyQuotes(filterFillers(text)), terms, trusted)
-  const fixed = [...glossed.fixed]
   const isLong = countWords(glossed.text) >= MODEL_MIN_WORDS && !glossed.text.includes('```')
-  let cleaned = glossed.text
 
-  if (mode === 'on' && isLong) {
-    const modelText = await cleanWithModel($, glossed.text, terms)
-
-    if (modelText !== undefined) {
-      const again = applyGlossary(applyQuotes(modelText), terms, trusted)
-
-      cleaned = again.text
-      fixed.push(...again.fixed.filter(term => !fixed.includes(term)))
-    }
+  if (mode !== 'on' || !isLong) {
+    return { text: glossed.text }
   }
+  const outcome = await cleanWithModel($, glossed.text, terms)
 
-  return { text: cleaned, fixed, isLong }
+  return 'text' in outcome
+    ? { text: applyGlossary(applyQuotes(outcome.text), terms, trusted).text }
+    : { text: glossed.text, problem: outcome.problem }
 }
 
 export const register: Register = on => {
@@ -297,31 +301,26 @@ export const register: Register = on => {
       parts.map(part => (part.isQuoted || part.text.trim() === '' || looksLikePaste(part.text) ? undefined : cleanPart($, part.text, mode, terms, trusted))),
     )
     const cleaned = parts.map((part, at) => results[at]?.text ?? part.text).join('\n')
-    const fixed = [...new Set(results.flatMap(result => result?.fixed ?? []))]
-    const isLong = results.some(result => result?.isLong === true)
-    const wordsBefore = countWords(e.text)
+    const problem = results.find(result => result?.problem !== undefined)?.problem
 
+    // Silent when it works. Only a failed AI pass is worth a word: the message
+    // still goes out, with the word filter alone.
+    if (problem !== undefined) {
+      $.ui.toast(`Dictation cleanup: the AI pass was skipped (${problem}); only the word filter ran.`)
+    }
     if (cleaned === e.text) {
       return next(e)
     }
 
     lastOriginal = e.text
     lastCleaned = cleaned
-    if (isLong || fixed.length > 0) {
-      const notes = [
-        isLong ? `Dictation cleaned: ${wordsBefore} → ${countWords(cleaned)} words` : undefined,
-        fixed.length > 0 ? `Spelled as in your project: ${fixed.join(', ')}` : undefined,
-      ]
-
-      $.ui.toast(notes.filter(note => note !== undefined).join(' · '))
-    }
 
     const entered = await next({ ...e, text: cleaned })
 
-    // The desktop app shows the prompt as typed, so say what Claude got: a
-    // transcript line the model never reads.
+    // Opt in with /clean compare on: the desktop app shows the prompt as typed,
+    // so this line says what Claude got (a transcript line the model never reads).
     if (await readCompare($)) {
-      $.ui.log(`Sent to Claude (${wordsBefore} → ${countWords(cleaned)} words):\n${cleaned}`)
+      $.ui.log(`Sent to Claude (${countWords(e.text)} → ${countWords(cleaned)} words):\n${cleaned}`)
     }
 
     return entered
