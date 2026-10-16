@@ -1,0 +1,3 @@
+#!/bin/sh
+# Runs before every commit. Blocks it when the staged changes hold personal data.
+exec sh "$(git rev-parse --show-toplevel)/.githooks/privacy-scan.sh" staged

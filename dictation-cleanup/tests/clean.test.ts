@@ -1,4 +1,5 @@
 import { describe, expect, mock, test } from 'claude-code/testing'
+import type { Engine } from 'claude-code/testing'
 import type { ModelUsage, On, PromptOrigin, PromptSubmitResult } from 'claude-code'
 
 import { filterFillers } from '../hooks/clean'
@@ -14,13 +15,28 @@ const MODEL_REPLY =
   'I have been using the microphone in Claude Code, and there are many filler words that still use tokens when sending. ' +
   'Is there a way to create something that cleans up what I said, so fillers and repetitions are gone before it is sent?'
 
+// What the last Haiku call was told to do.
+let lastSystem = ''
+
 // The engine beneath the plugin: the prompt enters as it arrives, and Haiku answers `reply`.
-const engine = (on: On, reply = MODEL_REPLY) => {
+// `files` are the docs of the folder the session runs in (root files only, by name).
+const engine = (on: On, reply = MODEL_REPLY, files: Record<string, string> = {}) => {
   const sentToModel: string[] = []
   mock.store(on)
+  on('session.cwd', () => ({ value: '/repo' }))
+  on('fs.list', (_$, e) => ({
+    value: e.path === '' || e.path === '.' ? Object.keys(files).filter(name => !name.includes('/')).map(name => ({ name, kind: 'file' as const, size: 1, mtimeMs: 0, isLink: false })) : [],
+  }))
+  // The engine hands the path over resolved against the folder, with backslashes on Windows.
+  on('fs.read', (_$, e) => {
+    const path = e.path.replaceAll('\\', '/')
+
+    return { value: Object.entries(files).find(([name]) => path === name || path.endsWith(`/${name}`))?.[1] ?? '' }
+  })
   on('prompt.submit', ($, e) => ({ text: e.text }))
   on('model.complete', ($, e) => {
     sentToModel.push(e.prompt)
+    lastSystem = e.system ?? ''
 
     return { value: { isAnswered: true, text: reply, usage: USAGE } }
   })
@@ -146,5 +162,53 @@ describe('/clean', () => {
     await $.prompt.submit({ text: 'Um, fix the the bug', origin: DESKTOP, wait: false })
 
     expect((await $.command.run(run('last'))).text).toContain('Um, fix the the bug')
+  })
+})
+
+describe('spoken quotes and project terms', () => {
+  const run = (args: string) => ({ command: 'clean', args, origin: TERMINAL, presentation: { isFullscreen: false, columns: 80 } })
+  const DOCS = {
+    'AGENTS.md': 'Read ADR-0074 first. Voices come from Qwen3-TTS and shorts.json lists the Shorts.',
+  }
+  const submit = async ($: Engine, text: string) => entered(await $.prompt.submit({ text, origin: DESKTOP, wait: false }))
+
+  test('quote unquote becomes quotation marks, with no model call', async ($, on) => {
+    const sentToModel = engine(on)
+
+    expect(await submit($, 'Um, the quote unquote compress step')).toBe('The "compress" step')
+    expect(sentToModel).toEqual([])
+  })
+
+  test('terms from the folder\'s docs are spelled as the docs spell them', async ($, on) => {
+    engine(on, MODEL_REPLY, DOCS)
+
+    expect(await submit($, 'Check ADR seventy four and Qwen three TTS, and open shorts dot json')).toBe('Check ADR-0074 and Qwen3-TTS, and open shorts.json')
+  })
+
+  test('a long prompt tells the model the project terms, and the spelling is applied again after its pass', async ($, on) => {
+    engine(on, MODEL_REPLY.replace('in Claude Code', 'in Qwen three TTS'), DOCS)
+    const result = entered(await $.prompt.submit({ text: LONG_DICTATION, origin: DESKTOP, wait: false }))
+
+    expect(lastSystem).toContain('Qwen3-TTS')
+    expect(lastSystem).toContain('ADR-0074')
+    expect(result).toContain('microphone in Qwen3-TTS,')
+  })
+
+  test('/clean term adds a spelling by hand, terms lists it, term remove drops it', async ($, on) => {
+    engine(on)
+
+    expect(await submit($, 'the Re motion render')).toBe('the Re motion render')
+    await $.command.run(run('term Remotion'))
+    expect(await submit($, 'the Re motion render')).toBe('the Remotion render')
+    expect((await $.command.run(run('terms'))).text).toContain('Remotion')
+    await $.command.run(run('term remove Remotion'))
+    expect(await submit($, 'the Re motion render')).toBe('the Re motion render')
+  })
+
+  test('off sends everything exactly as typed', async ($, on) => {
+    engine(on, MODEL_REPLY, DOCS)
+    await $.command.run(run('off'))
+
+    expect(await submit($, 'Um, quote unquote compress ADR seventy four')).toBe('Um, quote unquote compress ADR seventy four')
   })
 })

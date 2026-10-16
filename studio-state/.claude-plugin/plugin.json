@@ -1,0 +1,10 @@
+{
+  "name": "studio-state",
+  "version": "0.1.0",
+  "description": "Gives Claude a studio_state tool for a studio-layout video repository: one compact answer on where a video project stands, instead of a dozen file reads. Silent in every other folder.",
+  "author": { "name": "0langa", "url": "https://github.com/0langa" },
+  "homepage": "https://github.com/0langa/claude-code-mods/tree/main/studio-state",
+  "repository": "https://github.com/0langa/claude-code-mods",
+  "license": "MIT",
+  "keywords": ["youtube", "video", "studio", "tokens", "project-state"]
+}

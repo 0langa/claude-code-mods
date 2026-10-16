@@ -1,0 +1,22 @@
+name: privacy-scan
+
+# The same check the local git hooks run, on GitHub's side: it catches a push
+# from a machine where the hooks are not switched on. See PRIVACY.md.
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Scan every tracked file
+        run: sh .githooks/privacy-scan.sh tree
+      - name: Scan every commit in the history
+        run: sh .githooks/privacy-scan.sh range HEAD

@@ -6,7 +6,22 @@
     {
       "name": "dictation-cleanup",
       "source": "./dictation-cleanup",
-      "description": "Removes filler words and repetitions from dictated prompts before they are sent; longer prompts get a Haiku cleanup pass."
+      "description": "Cleans dictated prompts before they are sent: filler words, spoken quotation marks, project names spelled as the project's docs spell them, and a Haiku pass for longer messages."
+    },
+    {
+      "name": "tool-output-diet",
+      "source": "./tool-output-diet",
+      "description": "Trims shell output before Claude reads it: colour codes, overwritten progress-bar frames and long runs of identical lines. Nothing else is touched."
+    },
+    {
+      "name": "no-ai-trailers",
+      "source": "./no-ai-trailers",
+      "description": "Keeps the Claude co-author trailer and the Generated-with footer out of your commits and pull requests."
+    },
+    {
+      "name": "studio-state",
+      "source": "./studio-state",
+      "description": "Gives Claude a studio_state tool for a studio-layout video repository: one compact answer on where a video project stands. Silent in every other folder."
     }
   ]
 }

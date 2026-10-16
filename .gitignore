@@ -7,3 +7,30 @@ node_modules/
 *.log
 .DS_Store
 Thumbs.db
+
+# Personal data and anything generated on this machine. This repository is
+# public: none of it may ever be committed. See PRIVACY.md.
+.privacy/
+.secrets/
+.recall/
+.env
+.env.*
+*.local.*
+settings.local.json
+*.sqlite
+*.sqlite3
+*.db
+*.pem
+*.key
+*.p12
+*.pfx
+*.kdbx
+*.store.json
+*terms*.json
+*terms*.txt
+*dictionary*.json
+*dictionary*.txt
+*vocabulary*.json
+*vocabulary*.txt
+*glossary*.json
+*glossary*.txt

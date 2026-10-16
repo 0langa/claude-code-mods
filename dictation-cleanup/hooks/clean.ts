@@ -28,13 +28,26 @@ export const countWords = (text: string) => {
   return trimmed === '' ? 0 : trimmed.split(/\s+/).length
 }
 
-export const filterFillers = (text: string) => {
+// Swaps code, URLs and paths for placeholders so a rewrite cannot touch them;
+// `restore` puts them back. A placeholder holds control characters, which no
+// word pattern matches.
+export const shield = (text: string) => {
   const kept: string[] = []
   const shielded = text.replace(PROTECTED, token => {
     kept.push(token)
 
     return `${SLOT_OPEN}${kept.length - 1}${SLOT_CLOSE}`
   })
+  const restore = (value: string) =>
+    value.replace(new RegExp(`${SLOT_OPEN}(\\d+)${SLOT_CLOSE}`, 'g'), (_match: string, index: string) => kept[Number(index)] ?? '')
+
+  return { shielded, restore }
+}
+
+export const hasShieldSlot = (text: string) => text.includes(SLOT_OPEN)
+
+export const filterFillers = (text: string) => {
+  const { shielded, restore } = shield(text)
 
   const withoutFillers = shielded.replace(
     FILLER,
@@ -67,5 +80,5 @@ export const filterFillers = (text: string) => {
     .replace(new RegExp(`${CAPITALIZE}[ \\t]*(\\p{Ll})`, 'gu'), (_match: string, letter: string) => letter.toUpperCase())
     .replaceAll(CAPITALIZE, '')
 
-  return tidied.replace(new RegExp(`${SLOT_OPEN}(\\d+)${SLOT_CLOSE}`, 'g'), (_match: string, index: string) => kept[Number(index)] ?? '')
+  return restore(tidied)
 }
