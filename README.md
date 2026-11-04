@@ -10,6 +10,7 @@ This repository is a plugin marketplace. Each folder is one mod.
 | [tool-output-diet](tool-output-diet) | Trims shell output before Claude reads it: colour codes, progress bars redrawn a hundred times, and long runs of identical lines. Never touches file contents or the output of a failed command. |
 | [no-ai-trailers](no-ai-trailers) | Keeps the Claude co-author trailer and the "Generated with Claude Code" footer out of your commits and pull requests, even when something else tells the model to write them. `/trailers off` for a one-off. |
 | [studio-state](studio-state) | For a video-production repo with a `studio/` pipeline and a `projects/<slug>/` folder per video: a `studio_state` tool that answers where a video project stands in about ten lines, instead of a dozen file reads. Registers nothing in any other folder. |
+| [deferred-answers](deferred-answers) | When you answer one of Claude's questions with "not now", "later" or "after X" (a button or the question dialog), the question stays open and rides along with every message until it's done or you drop it. No reminding. `/deferred` lists them. |
 
 ## Install
 

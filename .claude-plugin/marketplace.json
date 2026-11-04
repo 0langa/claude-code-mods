@@ -22,6 +22,11 @@
       "name": "studio-state",
       "source": "./studio-state",
       "description": "Gives Claude a studio_state tool for a studio-layout video repository: one compact answer on where a video project stands. Silent in every other folder."
+    },
+    {
+      "name": "deferred-answers",
+      "source": "./deferred-answers",
+      "description": "Keeps 'later', 'not yet' and 'after X' answers to Claude's questions open: the question and your answer ride along with every message until the item is done or dropped."
     }
   ]
 }

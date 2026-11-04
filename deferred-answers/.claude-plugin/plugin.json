@@ -1,0 +1,11 @@
+{
+  "name": "deferred-answers",
+  "version": "0.1.0",
+  "description": "Keeps 'later', 'not yet' and 'after X' answers to Claude's questions open: the question and your answer are attached to every later message until the item is done or dropped, so you never have to remind Claude.",
+  "author": { "name": "0langa", "url": "https://github.com/0langa" },
+  "homepage": "https://github.com/0langa/claude-code-mods/tree/main/deferred-answers",
+  "repository": "https://github.com/0langa/claude-code-mods",
+  "license": "MIT",
+  "keywords": ["questions", "buttons", "deferral", "memory"],
+  "types": "./types/index.d.ts"
+}
