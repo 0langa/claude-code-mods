@@ -6,7 +6,7 @@
     {
       "name": "dictation-cleanup",
       "source": "./dictation-cleanup",
-      "description": "Cleans dictated prompts before they are sent: filler words, spoken quotation marks, project names spelled as the project's docs spell them, and a Haiku pass for longer messages."
+      "description": "Cleans dictated or typed prompts before they are sent: filler sounds, words that say nothing, typos, spoken quotation marks, project names spelled as the project's docs spell them, and a Haiku pass whose changes are checked word by word."
     },
     {
       "name": "tool-output-diet",
@@ -27,6 +27,11 @@
       "name": "deferred-answers",
       "source": "./deferred-answers",
       "description": "Keeps 'later', 'not yet' and 'after X' answers to Claude's questions open: the question and your answer ride along with every message until the item is done or dropped."
+    },
+    {
+      "name": "reply-diet",
+      "source": "./reply-diet",
+      "description": "Shortens the quotes in stacked replies before they are sent: a long quoted passage that is already in the conversation is cut to its first and last words. Your own words are never touched. Also lets you edit attached replies before they are sent."
     }
   ]
 }

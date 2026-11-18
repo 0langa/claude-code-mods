@@ -6,11 +6,12 @@ This repository is a plugin marketplace. Each folder is one mod.
 
 | Mod | What it does |
 | --- | --- |
-| [dictation-cleanup](dictation-cleanup) | Cleans dictated prompts before Claude sees them: filler words and repetitions, "quote unquote" turned into quotation marks, and project names spelled the way the project's own docs spell them ("ADR seventy four" becomes `ADR-0074`), with nothing to maintain. Longer prompts also get a short Haiku pass that streamlines the wording while keeping everything you meant. |
+| [dictation-cleanup](dictation-cleanup) | Cleans dictated or typed prompts before Claude sees them: filler sounds and repetitions, words that say nothing ("basically", "so yeah", "I guess", a pause "like"), "quote unquote" turned into quotation marks, and project names spelled the way the project's own docs spell them ("ADR seventy four" becomes `ADR-0074`), with nothing to maintain. Longer prompts also get a short Haiku pass for what only context can tell. Each change it makes is checked, so it can take words out and fix spellings but never reword you. |
 | [tool-output-diet](tool-output-diet) | Trims shell output before Claude reads it: colour codes, progress bars redrawn a hundred times, and long runs of identical lines. Never touches file contents or the output of a failed command. |
 | [no-ai-trailers](no-ai-trailers) | Keeps the Claude co-author trailer and the "Generated with Claude Code" footer out of your commits and pull requests, even when something else tells the model to write them. `/trailers off` for a one-off. |
 | [studio-state](studio-state) | For a video-production repo with a `studio/` pipeline and a `projects/<slug>/` folder per video: a `studio_state` tool that answers where a video project stands in about ten lines, instead of a dozen file reads. Registers nothing in any other folder. |
 | [deferred-answers](deferred-answers) | When you answer one of Claude's questions with "not now", "later" or "after X" (a button or the question dialog), the question stays open and rides along with every message until it's done or you drop it. No reminding. `/deferred` lists them. |
+| [reply-diet](reply-diet) | In the desktop app you can reply to a selected part of Claude's message. Stack many of those and every quoted passage is sent again in full. This cuts each long quote to its first and last words, and Claude looks the rest up in the conversation. Your own words are never touched. `/replies off` turns it off. It also lets you edit a reply that is already attached, which the app does not: send `#edit` as the message and the replies come back into the message box as text. |
 
 ## Install
 
