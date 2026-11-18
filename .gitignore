@@ -34,3 +34,5 @@ settings.local.json
 *vocabulary*.txt
 *glossary*.json
 *glossary*.txt
+
+.codex_memory/
