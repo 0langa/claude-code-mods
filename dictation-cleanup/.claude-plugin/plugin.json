@@ -1,8 +1,8 @@
 {
   "name": "dictation-cleanup",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "types": "./types/index.d.ts",
-  "description": "Corrects your prompts before they are sent, typed or dictated: fillers, typos, spoken quotation marks, project names spelled as the project's docs spell them, with a Haiku pass; your message is drawn as Claude got it.",
+  "description": "Cleans your prompts before they are sent, typed or dictated: filler sounds, words that say nothing (basically, so yeah, I guess, a pause \"like\"), typos, spoken quotation marks, project names spelled as the project's docs spell them. A Haiku pass handles what only context can tell, and each of its changes is checked so it cannot reword you. Your message is drawn as Claude got it.",
   "author": { "name": "0langa", "url": "https://github.com/0langa" },
   "homepage": "https://github.com/0langa/claude-code-mods/tree/main/dictation-cleanup",
   "repository": "https://github.com/0langa/claude-code-mods",

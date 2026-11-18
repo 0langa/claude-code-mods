@@ -11,7 +11,12 @@ const TERMINAL: PromptOrigin = { kind: 'composer' }
 const LONG_DICTATION =
   'So, um, I have been using the the microphone in Claude Code, uh, and there are a lot of, uh, filler words that still use tokens when sending. ' +
   'I am wondering if there is any way, um, I could create something that cleans up what I said, so all those fillers and repetitions are gone before it is sent.'
+// A cleanup: the opener is gone, every other word is the person's own.
 const MODEL_REPLY =
+  'I have been using the microphone in Claude Code, and there are a lot of filler words that still use tokens when sending. ' +
+  'I am wondering if there is any way I could create something that cleans up what I said, so all those fillers and repetitions are gone before it is sent.'
+// The same message put in the model's own words.
+const MODEL_REWRITE =
   'I have been using the microphone in Claude Code, and there are many filler words that still use tokens when sending. ' +
   'Is there a way to create something that cleans up what I said, so fillers and repetitions are gone before it is sent?'
 
@@ -78,7 +83,7 @@ describe('filter', () => {
   })
 
   test('removes German filler sounds too', () => {
-    expect(filterFillers('Oh, ähm, surprise.')).toBe('Oh surprise.')
+    expect(filterFillers('Right, ähm, surprise.')).toBe('Right surprise.')
     expect(filterFillers('So äh I think öhm so')).toBe('So I think so')
     expect(filterFillers('Ahm, the ohm and the Öl')).toBe('Ahm, the ohm and the Öl')
   })
@@ -115,6 +120,25 @@ describe('prompt', () => {
     // Nothing is added to the session when it works.
     expect(toasts).toEqual([])
     expect(logged).toEqual([])
+  })
+
+  test('a reply that puts the message in other words is undone, word for word', async ($, on) => {
+    engine(on, MODEL_REWRITE)
+    const result = await $.prompt.submit({ text: LONG_DICTATION, origin: DESKTOP, wait: false })
+
+    // "many" for "a lot of", a statement turned into a question, "all those"
+    // dropped: none of it is taken. The opener it deleted is.
+    expect(entered(result)).toBe(MODEL_REPLY)
+    expect(toasts).toEqual([])
+  })
+
+  test('words that say nothing go without a model call', async ($, on) => {
+    const sentToModel = engine(on)
+    const result = await $.prompt.submit({ text: 'So yeah, basically fix the parser, I guess.', origin: DESKTOP, wait: false })
+
+    expect(entered(result)).toBe('So fix the parser.')
+    expect(sentToModel).toEqual([])
+    expect(toasts).toEqual([])
   })
 
   test('an implausible model reply falls back to the filtered text', async ($, on) => {
@@ -171,6 +195,36 @@ describe('/clean', () => {
 
     expect((await $.command.run(run('last'))).text).toContain('Um, fix the the bug')
   })
+
+  test('filler adds a phrase of your own, filler keep leaves one in, fillers lists them', async ($, on) => {
+    engine(on)
+    const submit = async (text: string) => entered(await $.prompt.submit({ text, origin: DESKTOP, wait: false }))
+
+    expect(await submit('To be fair, basically fix it.')).toBe('To be fair, fix it.')
+
+    expect((await $.command.run(run('filler To be fair'))).text).toContain('Added "to be fair"')
+    expect(await submit('To be fair, basically fix it.')).toBe('Fix it.')
+
+    expect((await $.command.run(run('filler keep basically'))).text).toContain('stays in your messages')
+    expect(await submit('To be fair, basically fix it.')).toBe('Basically fix it.')
+
+    const list = (await $.command.run(run('fillers'))).text ?? ''
+
+    expect(list).toContain('Yours, taken out wherever they stand: to be fair')
+    expect(list).toContain('Left in because you said so: basically')
+    expect(list).toContain('pretty much')
+
+    // Both can be taken back.
+    expect((await $.command.run(run('filler basically'))).text).toContain('taken out again')
+    expect((await $.command.run(run('filler keep to be fair'))).text).toContain('stays in your messages')
+    expect(await submit('To be fair, basically fix it.')).toBe('To be fair, fix it.')
+  })
+
+  test('filler refuses what is not a phrase', async ($, on) => {
+    engine(on)
+
+    expect((await $.command.run(run('filler src/app.ts'))).text).toContain('one to five plain words')
+  })
 })
 
 describe('spoken quotes and project terms', () => {
@@ -194,13 +248,29 @@ describe('spoken quotes and project terms', () => {
     expect(toasts).toEqual([])
   })
 
-  test('a long prompt tells the model the project terms, and the spelling is applied again after its pass', async ($, on) => {
-    engine(on, MODEL_REPLY.replace('in Claude Code', 'in Qwen three TTS'), DOCS)
-    const result = entered(await $.prompt.submit({ text: LONG_DICTATION, origin: DESKTOP, wait: false }))
+  test('a long prompt tells the model the project terms, and a mis-heard one may be written as the docs write it', async ($, on) => {
+    engine(on, MODEL_REPLY.replace('in Claude Code', 'in Qwen3-TTS'), DOCS)
+    const result = entered(await $.prompt.submit({ text: LONG_DICTATION.replace('in Claude Code', 'in Quen three TTS'), origin: DESKTOP, wait: false }))
 
     expect(lastSystem).toContain('Qwen3-TTS')
     expect(lastSystem).toContain('ADR-0074')
     expect(result).toContain('microphone in Qwen3-TTS,')
+  })
+
+  test('the spelling is applied again after the model pass', async ($, on) => {
+    // The model only fixes the typo; that makes the spoken form the docs' term.
+    engine(on, MODEL_REPLY.replace('in Claude Code', 'in Qwen three TTS'), DOCS)
+    const result = entered(await $.prompt.submit({ text: LONG_DICTATION.replace('in Claude Code', 'in Qwen threee TTS'), origin: DESKTOP, wait: false }))
+
+    expect(result).toContain('microphone in Qwen3-TTS,')
+  })
+
+  test('a name the docs do not have is not the model\'s to put in', async ($, on) => {
+    engine(on, MODEL_REPLY.replace('in Claude Code', 'in Whisper'), DOCS)
+    const result = entered(await $.prompt.submit({ text: LONG_DICTATION, origin: DESKTOP, wait: false }))
+
+    expect(result).toContain('microphone in Claude Code and')
+    expect(result).not.toContain('Whisper')
   })
 
   test('/clean term adds a spelling by hand, terms lists it, term remove drops it', async ($, on) => {
