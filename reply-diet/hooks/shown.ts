@@ -35,5 +35,6 @@ export async function rememberPair($: EngineInterface, typed: string, sent: stri
 export async function sentFor($: EngineInterface, shown: string) {
   const key = fingerprint(shown.trim())
 
-  return (await read($, pairs)).find(item => item.typed === key)?.sent
+  // The newest pair: the same text sent again may have been shortened differently.
+  return (await read($, pairs)).findLast(item => item.typed === key)?.sent
 }

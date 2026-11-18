@@ -1,6 +1,6 @@
-import type { EngineInterface, Register } from 'claude-code'
+import type { EngineInterface, PromptSubmitInput, PromptSubmitResult, Register } from 'claude-code'
 
-import { BROKEN_REASON, holdsRepliesOf, putBack, stopOrPass } from './back'
+import { BROKEN_REASON, holdsRepliesOf, passing, putBack, release, stopOrPass } from './back'
 import { dietReplies, isReplyMessage, searchable } from './replies'
 import { rememberPair, sentFor } from './shown'
 
@@ -82,31 +82,67 @@ export const register: Register = on => {
       return passed
     }
     const e = passed.text === incoming.text ? incoming : { ...incoming, text: passed.text }
+    const result = await shortened($, incoming, e, passed.mayShorten, next)
 
-    if (!isReplyMessage(e.text) || !(await isEnabled($))) {
-      return next(e)
+    // The kept replies are given up only once they have gone out: a hook
+    // beneath may still have stopped the message.
+    if (passed.release && !('drop' in result && result.drop !== undefined)) {
+      try {
+        await release($)
+      } catch {
+        // Kept a while longer; /replies back says what it holds.
+      }
     }
-    let slim
 
-    try {
-      // Claude's own messages, as far as they are still in the conversation: a
-      // quote is only shortened when Claude can look the rest of it up there.
-      const rows = await $.session.messages()
-
-      slim = dietReplies(e.text, searchable(rows.filter(row => row.role === 'assistant').map(row => row.text)))
-    } catch (error) {
-      // Silent when it works. A failure is worth a word: the message still goes out, as typed.
-      $.ui.toast(`Reply diet: the quotes were not shortened (${String(error).slice(0, 120)}). The message went out as typed.`)
-
-      return next(e)
-    }
-    if (slim.quotes === 0) {
-      return next(e)
-    }
-    await record($, e.text, slim.text, slim.quotes, slim.savedChars)
-
-    return next({ ...e, text: slim.text })
+    return result
     // The hook broke or ran out of time. A send that was being stopped stays
-    // stopped while the replies are kept here; anything else goes out.
-  }).catch(($, e, next) => (!next.called && holdsRepliesOf(e) ? { drop: BROKEN_REASON } : next(e)))
+    // stopped while the replies are kept here. Anything else goes out, edited
+    // replies still numbered, and one line says the mod failed.
+  }).catch(($, e, next) => {
+    if (next.called) {
+      return next(e)
+    }
+    if (holdsRepliesOf(e)) {
+      return { drop: BROKEN_REASON }
+    }
+    $.ui.toast(`Reply diet broke on this message (${next.error.message?.slice(0, 120) ?? next.error.kind}). It went out unshortened.`)
+
+    return next({ ...e, text: passing(e.text) })
+  })
+}
+
+// The diet's step: a message with replies goes on with its long quotes
+// shortened, anything else as it is.
+async function shortened(
+  $: EngineInterface,
+  incoming: PromptSubmitInput,
+  e: PromptSubmitInput,
+  mayShorten: boolean,
+  next: (e: PromptSubmitInput) => Promise<PromptSubmitResult>,
+): Promise<PromptSubmitResult> {
+  if (!mayShorten || !isReplyMessage(e.text) || !(await isEnabled($))) {
+    return next(e)
+  }
+  let slim
+
+  try {
+    // Claude's own messages, as far as they are still in the conversation: a
+    // quote is only shortened when Claude can look the rest of it up there.
+    const rows = await $.session.messages()
+
+    slim = dietReplies(e.text, searchable(rows.filter(row => row.role === 'assistant').map(row => row.text)))
+  } catch (error) {
+    // Silent when it works. A failure is worth a word: the message still goes out, as typed.
+    $.ui.toast(`Reply diet: the quotes were not shortened (${String(error).slice(0, 120)}). The message went out as typed.`)
+
+    return next(e)
+  }
+  if (slim.quotes === 0) {
+    return next(e)
+  }
+  // Keyed by the text as it came: the row draws what was typed, before this
+  // mod numbered an edited text.
+  await record($, incoming.text, slim.text, slim.quotes, slim.savedChars)
+
+  return next({ ...e, text: slim.text })
 }

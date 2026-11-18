@@ -22,7 +22,10 @@
 
 // The first marker, at the start of the text or of a line, with its quote line.
 const NUMBERED_LEAD = /(?:^|\n)(<!-- reply [1-9][0-9]? -->)(?=\n>)/
-const BARE_LEAD = /^<!-- reply -->(?=\n>)/
+// A bare first marker with a quote line as the app's parser takes one ("> " or
+// ">" alone), behind the lines the app puts in front for files attached again.
+const BARE_LEAD = /^((?:@[^\n]*\n)*)<!-- reply -->(?=\n>(?: |\n|$))/
+const BARE_MARKER = /(?:^|\n)<!-- reply -->\n(?=>(?: |\n|$))/g
 const BARE = '<!-- reply -->'
 // Each reply block opens with a marker at the start or after a blank line, and a quote line.
 const BLOCK = /(?:^|\n\n)<!-- reply(?: [1-9][0-9]?)? -->\n>/g
@@ -76,25 +79,135 @@ export const askedForEdit = (typed: string) => {
 // that is the message, not part of the last comment.
 export const editable = (replies: string, rest = '') => `${replies.replace(/^<!-- reply [1-9][0-9]? -->/, BARE)}${TYPED}${rest}`
 
+// A reply as the person left it in the box: its quote lines and its comment.
+type Block = { quote: string[]; comment: string }
+
+// A line of a quote, as the app's parser takes it: ">" and a space, or ">" alone.
+const QUOTE_LINE = /^>(?: |$)/
+
+const quoteRun = (lines: string[]) => {
+  let n = 0
+
+  while (n < lines.length && QUOTE_LINE.test(lines[n] ?? '')) {
+    n += 1
+  }
+
+  return n
+}
+
+// Where the quote at the start of a block's text ends.
+const quoteLength = (body: string) => {
+  const lines = body.split('\n')
+
+  return lines.slice(0, quoteRun(lines)).join('\n').length
+}
+
+const block = (body: string): Block => {
+  const lines = body.split('\n')
+  const n = quoteRun(lines)
+
+  // A blank quote line goes out as the app writes it, "> ": ">" alone in the
+  // middle of a text would end the quote for the app's parser.
+  return { quote: lines.slice(0, n).map(line => (line === '>' ? '> ' : line)), comment: lines.slice(n).join('\n').replace(/^\n+|\n+$/g, '').replace(/\n{3,}/g, '\n\n') }
+}
+
+// The app's parser goes on after a quote only when a comment follows. A reply
+// whose comment the person deleted, anywhere but last, would end the replies
+// there and leave every later one drawn as plain text. The app itself never
+// sends such a reply. So its quote goes to the top of the next reply's quote,
+// as one passage with a blank quote line between: nothing is lost, the comment
+// below covers both, and the message is drawn as replies. The last reply may
+// have no comment: the parser draws that one as it is.
+const joined = (blocks: Block[]) => {
+  const out: Block[] = []
+  let carried: string[] = []
+
+  blocks.forEach((b, i) => {
+    const quote = carried.length === 0 ? b.quote : [...carried, '> ', ...b.quote]
+
+    if (b.comment === '' && i < blocks.length - 1) {
+      carried = quote
+    } else {
+      out.push({ quote, comment: b.comment })
+      carried = []
+    }
+  })
+
+  return out
+}
+
 // The edited text on its way back: a message that opens with a bare marker and
 // a quote gets the number of its blocks, which makes it a message with replies
 // again for everything behind this mod. Undefined for any other text.
-export const numbered = (text: string) => {
-  if (!BARE_LEAD.test(text)) {
+export const numbered = (whole: string) => {
+  const lead = BARE_LEAD.exec(whole)
+
+  if (lead === null) {
     return undefined
   }
-  // Two blank lines end the replies for the app. Inside the replies, where the
-  // person may have left some while editing, they would cut the later replies
-  // off: up to the last block they become one blank line.
-  const last = text.lastIndexOf(`\n\n${BARE}\n>`)
-  const tidy = last === -1 ? text : `${text.slice(0, last).replace(/\n{3,}/g, '\n\n').replace(/\n+$/, '')}${text.slice(last)}`
-  const end = tidy.indexOf(TYPED)
-  const count = ((end === -1 ? tidy : tidy.slice(0, end)).match(BLOCK) ?? []).length
+  const prefix = lead[1] ?? ''
+  const text = whole.slice(prefix.length)
+  // Each block opens with a marker line and a quote line. The last block's
+  // comment ends at two blank lines; what follows is the typed message. Blank
+  // lines before the last block belong to the replies, however many the person
+  // left there while editing.
+  const markers = [...text.matchAll(BARE_MARKER)]
 
-  return count >= 1 && count <= MAX_REPLIES ? { text: `<!-- reply ${count} -->${tidy.slice(BARE.length)}`, count } : undefined
+  if (markers[0]?.index !== 0) {
+    return undefined
+  }
+  const bodies = markers.map((m, i) => text.slice(m.index + m[0].length, markers[i + 1]?.index))
+  const lastBody = bodies.pop() ?? ''
+  // The typed message starts at the first two blank lines after the last quote.
+  const end = lastBody.indexOf(TYPED, quoteLength(lastBody))
+  const typed = end === -1 ? '' : lastBody.slice(end + TYPED.length)
+  const blocks = joined([...bodies.map(block), block(end === -1 ? lastBody : lastBody.slice(0, end))])
+  const count = blocks.length
+
+  if (count < 1 || count > MAX_REPLIES) {
+    return undefined
+  }
+  const replies = blocks.map((b, i) => `${i === 0 ? `<!-- reply ${count} -->` : BARE}\n${b.quote.join('\n')}${b.comment === '' ? '' : `\n\n${b.comment}`}`).join('\n\n')
+
+  return { text: `${prefix}${typed === '' ? replies : `${replies}${TYPED}${typed}`}`, count }
 }
 
-const quoteLines = (text: string) => text.split('\n').filter(line => line.startsWith('>') && line.length > 8)
+// How many replies a text that opens with a bare marker holds as it came.
+export const bareBlocks = (text: string) => [...text.matchAll(BARE_MARKER)].length
+
+// The quote lines that tell a text apart: those with some length, or all of
+// them when every quote is short.
+const quoteLines = (text: string) => {
+  const all = text.split('\n').filter(line => line.startsWith('>') && line.trim().length > 1)
+  const long = all.filter(line => line.length > 8)
+
+  return long.length > 0 ? long : all
+}
+
+// Whether a text holds any line of the replies kept, quote or comment: how an
+// edited text is known to come from the box when the person changed its quotes.
+export const sharesLine = (text: string, replies: string) => {
+  const kept = replies.split('\n').filter(line => line.trim() !== '' && !line.startsWith('<!-- reply') && line.trim() !== '>')
+  const lines = new Set(text.split('\n'))
+
+  // A chance match only numbers a single reply, as 0.2.0 numbered every one.
+  return kept.some(line => lines.has(line))
+}
+
+// Whether every quote line of a text stands as it was in the replies kept: the
+// person changed no quote. Blank quote lines do not count; joining adds them.
+export const keepsQuotes = (text: string, replies: string) => {
+  const lines = new Set(replies.split('\n'))
+
+  return text.split('\n').every(line => !line.startsWith('>') || line.trim() === '>' || lines.has(line))
+}
+
+// Whether every quote line of the replies kept is in a text: they were all sent.
+export const carriesAll = (text: string, replies: string) => {
+  const lines = new Set(text.split('\n'))
+
+  return quoteLines(replies).every(line => lines.has(line))
+}
 
 // Whether a text holds at least one of the quotes of another: how a message is
 // known to come from the replies that were put into the box, and how the box

@@ -41,12 +41,16 @@ Your words are safe at every step:
 - The replies are kept by the mod before it tries anything, because by then the app has already emptied the box and removed the cards.
 - A box that holds something is never written over. The reason on the card then tells you to put `/replies back` at the very start of the box and send it: what was in the box comes back under the replies.
 - If the box does not take the text, the mod tries twice more, and `/replies back` puts it in by hand.
-- If the mod itself breaks, your message goes out as you wrote it, unless the mod already holds the replies.
+- If the mod itself breaks, your message goes out as you wrote it, unless the mod already holds the replies, and one line says so.
+- The mod lets go of the replies only once the edited message has really gone out. A draft you put behind `/replies back` is kept with them.
 
 Good to know:
 
 - It works for messages typed into the message box of the computer. A message sent from the phone is passed through: the phone's box cannot be filled.
 - The message you stopped stays shown in the chat until the session is reloaded, although Claude never got it.
+- If you delete a reply's comment and keep its quote, that quote is joined to the next reply's quote and the next comment covers both, because the app shows a reply without a comment only as the last one. The last reply may stay without a comment.
+- A quote you changed is sent as you wrote it, not shortened.
+- `#edit` under replies that are already in the box stops the send again and puts them back as they are now.
 - A line you add at the very end, under the last comment, is sent as part of that comment. Type your message above `#edit` before you stop the send to keep it apart.
 - Files and pictures attached to the stopped message are not kept: attach them again.
 - While Claude is still working, the app has its own "Cancel and edit message" for a message that waits in the queue.

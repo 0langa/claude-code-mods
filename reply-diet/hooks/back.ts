@@ -14,7 +14,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, PromptOrigin, Timer } from 'claude-code'
 
 import type { Stash } from '../types'
-import { askedForEdit, editable, numbered, sharesQuote, splitSent } from './edit'
+import { askedForEdit, bareBlocks, carriesAll, editable, keepsQuotes, numbered, sharesLine, sharesQuote, splitSent } from './edit'
 
 const NOTHING: Stash = { text: '', isInBox: false }
 
@@ -37,6 +37,9 @@ let kept = ''
 let keptFrom = ''
 let isFilling = false
 let retry: Timer | undefined
+// The edited text this mod numbered last, for the hook's `.catch`: a message
+// that breaks the hook after that still goes out numbered.
+let numberedLast = { from: '', to: '' }
 
 async function waiting($: EngineInterface): Promise<Stash> {
   try {
@@ -59,6 +62,26 @@ async function keep($: EngineInterface, value: Stash) {
 
 type Filled = 'filled' | 'box holds something' | 'not taken' | 'busy'
 
+// A fill landed. While it was on its way, a second stop may have joined more
+// replies to the kept text: then that text is still waiting, not in the box.
+async function markInBox($: EngineInterface, text: string) {
+  if (kept !== text) {
+    return
+  }
+  try {
+    await update($, stash, held => (held.text === text ? { text, isInBox: true } : held))
+  } catch {
+    // Still kept, only not marked as in the box.
+  }
+}
+
+// The kept replies were sent: nothing waits any more.
+export async function release($: EngineInterface) {
+  retry?.cancel()
+  retry = undefined
+  await keep($, NOTHING)
+}
+
 // Puts the text into the box when the box is empty. Never over the person's
 // own text, and never while another fill of this mod is still on its way.
 async function fillEmptyBox($: EngineInterface, text: string): Promise<Filled> {
@@ -72,7 +95,7 @@ async function fillEmptyBox($: EngineInterface, text: string): Promise<Filled> {
     if (box.text.trim() !== '') {
       // A late write of an earlier fill: the text is where it belongs.
       if (sharesQuote(box.text, text)) {
-        await keep($, { text, isInBox: true })
+        await markInBox($, text)
 
         return 'filled'
       }
@@ -84,7 +107,7 @@ async function fillEmptyBox($: EngineInterface, text: string): Promise<Filled> {
     const filled = await $.prompt.fill({ text, mode: 'append' })
 
     if (filled.isFilled) {
-      await keep($, { text, isInBox: true })
+      await markInBox($, text)
     }
 
     return filled.isFilled ? 'filled' : 'not taken'
@@ -108,11 +131,14 @@ function retryLater($: EngineInterface, round: number) {
       try {
         const held = await waiting($)
 
-        if (held.text !== '' && !held.isInBox && (await fillEmptyBox($, held.text)) === 'not taken') {
+        const outcome = held.text !== '' && !held.isInBox ? await fillEmptyBox($, held.text) : 'filled'
+
+        if (outcome === 'not taken' || outcome === 'busy') {
           retryLater($, round + 1)
         }
       } catch {
         // The text stays kept; /replies back still has it.
+        retryLater($, round + 1)
       }
     })()
   })
@@ -127,40 +153,52 @@ const reasonFor = (outcome: Filled, hasFiles: boolean) =>
 
 type Prompt = { text: string; origin: PromptOrigin; attachments?: readonly unknown[] }
 
+// Let through: the text to go on with (the edited text with its number back,
+// or the text as it came); `release` when, once it has gone out, the kept
+// replies are sent; `mayShorten` false when the person changed a quote, which
+// the diet must then leave as written.
+type Passed = { text: string; release: boolean; mayShorten: boolean }
+
 // What becomes of a prompt before anything else looks at it: stopped (the
-// replies go back into the box), or let through with the text to go on with,
-// which is the edited text with its number back, or the text as it came.
-export async function stopOrPass($: EngineInterface, e: Prompt, signal: AbortSignal): Promise<{ drop: string } | { text: string }> {
+// replies go back into the box), or let through.
+export async function stopOrPass($: EngineInterface, e: Prompt, signal: AbortSignal): Promise<{ drop: string } | Passed> {
+  const as = { text: e.text, release: false, mayShorten: true }
+
   if (!isAtBox(e.origin)) {
-    return { text: e.text }
+    return as
   }
   const back = numbered(e.text)
-
-  // The edited text on its way back. The kept copy goes only when this message
-  // carries its quotes; another message that opens with a bare marker (the
-  // app's own single reply) leaves it waiting.
-  if (back !== undefined) {
-    const held = await waiting($)
-
-    if (held.text !== '' && sharesQuote(e.text, held.text)) {
-      retry?.cancel()
-      retry = undefined
-      await keep($, NOTHING)
-    }
-
-    return { text: back.text }
-  }
-  const sent = splitSent(e.text)
+  // "#edit" under replies already in the box stops the send too.
+  const sent = splitSent(back?.text ?? e.text)
   const asked = sent === undefined ? undefined : askedForEdit(sent.typed)
 
-  if (sent === undefined || asked === undefined) {
-    return { text: e.text }
+  if (sent === undefined) {
+    return as
+  }
+  if (asked === undefined) {
+    const held = await waiting($)
+    const ours = held.text !== '' && (sharesQuote(e.text, held.text) || (back !== undefined && sharesLine(e.text, held.text)))
+    // The kept copy goes only once a message has carried its replies out: the
+    // text from the box, or all of its quotes (the cards the app put back
+    // after an early Stop).
+    const release = ours && (held.isInBox || carriesAll(e.text, held.text))
+
+    if (back === undefined) {
+      return { ...as, release }
+    }
+    // The app's own single reply, not from the box: the app draws it as it is.
+    if (!ours && bareBlocks(e.text) === 1) {
+      return as
+    }
+    numberedLast = { from: e.text, to: back.text }
+
+    return { text: back.text, release, mayShorten: !ours || keepsQuotes(e.text, held.text) }
   }
   // Replies of an earlier stop that never reached the box are still waiting:
-  // the new ones join them.
+  // the new ones join them, unless this is the same stop again.
   const earlier = await waiting($)
   const fresh = editable(sent.replies, asked.rest)
-  const text = earlier.text !== '' && !earlier.isInBox && !sharesQuote(earlier.text, fresh) ? `${earlier.text.trimEnd()}\n\n${fresh}` : fresh
+  const text = earlier.text !== '' && !earlier.isInBox && !earlier.text.includes(fresh.trimEnd()) ? `${earlier.text.trimEnd()}\n\n${fresh}` : fresh
 
   kept = text
   keptFrom = e.text
@@ -170,15 +208,18 @@ export async function stopOrPass($: EngineInterface, e: Prompt, signal: AbortSig
 
   try {
     await keep($, { text, isInBox: false })
-    // An early Stop makes the app put the cards and the text back itself: no fill then.
-    if (!signal.aborted) {
+    // An early Stop makes the app put the cards and the text back itself: no
+    // fill then, and what waited before waits as it was.
+    if (signal.aborted) {
+      await keep($, earlier)
+    } else {
       outcome = await fillEmptyBox($, text)
-      if (outcome === 'not taken' && !signal.aborted) {
-        retryLater($, 0)
-      }
     }
   } catch {
     // The reason below says where the text is.
+  }
+  if (!signal.aborted && (outcome === 'not taken' || outcome === 'busy')) {
+    retryLater($, 0)
   }
 
   return { drop: reasonFor(outcome, sent.prefix !== '' || (e.attachments?.length ?? 0) > 0) }
@@ -188,12 +229,16 @@ export async function stopOrPass($: EngineInterface, e: Prompt, signal: AbortSig
 // here. Then the send stays stopped; otherwise the message goes out, because a
 // message that reaches Claude can be taken back and one that is dropped is gone.
 export const holdsRepliesOf = (e: Prompt) => {
-  const sent = isAtBox(e.origin) ? splitSent(e.text) : undefined
+  const sent = isAtBox(e.origin) ? splitSent(numbered(e.text)?.text ?? e.text) : undefined
 
   return kept !== '' && keptFrom === e.text && sent !== undefined && askedForEdit(sent.typed) !== undefined
 }
 
 export const BROKEN_REASON = `Not sent. Something went wrong while your replies were put back.${BACK_HINT}`
+
+// For the hook's `.catch`: the text to let through, numbered when this mod
+// had numbered it before the hook broke.
+export const passing = (text: string) => (numberedLast.from === text ? numberedLast.to : text)
 
 // /replies back: the waiting replies go into the box again. What stood behind
 // the command was the person's draft: it goes under the replies as the
@@ -204,18 +249,23 @@ export async function putBack($: EngineInterface, draft: string) {
   if (held.text === '') {
     return 'Nothing is waiting: no send has been stopped, or its replies were sent.'
   }
-  retry?.cancel()
-  const box = await $.prompt.read()
-
-  if (box.text.trim() !== '') {
-    return 'Your message box is not empty. Put /replies back at the very start of that text and send it: the text comes back under the replies.'
-  }
+  // The draft behind the command exists nowhere else now: it is kept with the
+  // replies before anything is tried.
   const text = draft === '' ? held.text : `${held.text.trimEnd()}\n\n\n${draft}`
-  const filled = await $.prompt.fill({ text, mode: 'append' })
 
-  if (filled.isFilled) {
-    await keep($, { text, isInBox: true })
+  retry?.cancel()
+  await keep($, { text, isInBox: false })
+  let outcome: Filled = 'not taken'
+
+  try {
+    outcome = await fillEmptyBox($, text)
+  } catch {
+    // Answered below.
   }
 
-  return filled.isFilled ? 'Your replies are in the message box.' : 'The message box did not take the text. Try again in a moment.'
+  return outcome === 'filled'
+    ? 'Your replies are in the message box.'
+    : outcome === 'box holds something'
+      ? 'Your message box is not empty. Put /replies back at the very start of that text and send it: the text comes back under the replies.'
+      : 'The message box did not take the text. Try /replies back again in a moment.'
 }

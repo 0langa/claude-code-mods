@@ -1,6 +1,6 @@
 {
   "name": "reply-diet",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "types": "./types/index.d.ts",
   "description": "Shortens the quotes in stacked replies before they are sent: a long quoted passage that is already in the conversation is cut to its first and last words. Your own words are never touched. Also lets you edit replies that are already attached: send #edit and they come back into the message box as text.",
   "author": { "name": "0langa", "url": "https://github.com/0langa" },
